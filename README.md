@@ -1,6 +1,12 @@
 # Anchors
 
-로블록스FLY 게임 코드 저장소. [Rojo](https://rojo.space)로 VS Code에서 짠 코드를 Roblox Studio에 실시간 동기화합니다.
+ROFLY(로블록스FLY) 게임 저장소. [Rojo](https://rojo.space)로 VS Code에서 짠 코드를 Roblox Studio에 실시간 동기화합니다.
+
+## 자료
+
+- 기획서(온라인, 최신본): https://claude.ai/artifact/BPTtwcD7fyrYZ7Ac6vHFE4
+- `docs/concept-images`: 챕터별 콘셉트 이미지 (`old-v1`은 이전 버전)
+- `docs/diagrams`: 로켓 부품 그리드 다이어그램
 
 ## 폴더 구조
 
@@ -26,16 +32,15 @@
    ```sh
    curl -sSf https://raw.githubusercontent.com/rojo-rbx/rokit/main/scripts/install.sh | bash
    ```
-5. **프로젝트 받기 + Rojo 설치**: Studio는 끈 상태에서
+5. **프로젝트 받기 + Rojo 설치**: Studio는 끈 상태에서 (작업 폴더는 `~/ROFLY`)
    ```sh
-   cd ~
-   git clone https://github.com/mantenine-lgtm/Anchors.git
-   cd Anchors
+   git clone https://github.com/mantenine-lgtm/Anchors.git ~/ROFLY
+   cd ~/ROFLY
    rokit install          # Rojo 설치 (물어보면 y)
    mkdir -p ~/Documents/Roblox/Plugins
    rojo plugin install    # Studio용 Rojo 플러그인 설치
    ```
-6. **VS Code 확장**: VS Code `File › Open Folder` → `Anchors` 폴더 열기 → 오른쪽 아래 권장 확장 알림에서 설치
+6. **VS Code 확장**: VS Code `File › Open Folder` → `ROFLY` 폴더 열기 → 오른쪽 아래 권장 확장 알림에서 설치
    (안 뜨면 확장 탭에서 `Luau Language Server` 검색 → 설치. 자동완성·오류 표시용)
 
 ## 연결 확인
@@ -51,6 +56,6 @@
 
 ## 매일 작업
 
-1. VS Code로 `Anchors` 폴더 열기 → 터미널에 `rojo serve`
+1. VS Code로 `ROFLY` 폴더 열기 → 터미널에 `rojo serve`
 2. Studio에서 게임 열기 → `Rojo` → `Connect`
 3. VS Code에서 코드 수정·저장 → Studio에 바로 반영
