@@ -1,0 +1,11 @@
+# Roblox 플레이스 파일 (맵은 Roblox 클라우드에 게시해서 보관)
+*.rbxl
+*.rbxlx
+*.rbxl.lock
+*.rbxlx.lock
+
+# Luau LSP가 자동 생성
+sourcemap.json
+
+# macOS
+.DS_Store
