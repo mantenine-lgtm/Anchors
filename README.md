@@ -47,7 +47,9 @@ ROFLY(로블록스FLY) 게임 저장소. [Rojo](https://rojo.space)로 VS Code�
 
 1. VS Code `Terminal › New Terminal` → `rojo serve`
 2. Studio 실행 → Baseplate 새로 만들기 → 상단 `Plugins` 탭 → `Rojo` → `Connect` (접근 허용 물으면 허용)
-3. ▶ Play → Output 창(안 보이면 `View › Output`)에 아래 두 줄이 나오면 성공
+   - **▶ Play 전, 편집 상태에서 연결해야 합니다.** 플레이 중에 누르면 `Http requests can only be executed by game server` 오류가 납니다.
+   - 연결되면 Explorer의 ServerScriptService 안에 `Server › Main`이 생깁니다.
+3. ▶ Play → Output 창(안 보이면 `Script` 탭에서 열기)에 아래 두 줄이 나오면 성공
    ```
    [Server] Rojo 연결 OK
    [Client] Rojo 연결 OK
@@ -57,5 +59,5 @@ ROFLY(로블록스FLY) 게임 저장소. [Rojo](https://rojo.space)로 VS Code�
 ## 매일 작업
 
 1. VS Code로 `ROFLY` 폴더 열기 → 터미널에 `rojo serve`
-2. Studio에서 게임 열기 → `Rojo` → `Connect`
+2. Studio에서 게임 열기 → `Rojo` → `Connect` (▶ Play 전에)
 3. VS Code에서 코드 수정·저장 → Studio에 바로 반영
