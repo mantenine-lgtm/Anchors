@@ -72,7 +72,8 @@ function Bots.place(index: number, seatIndex: number)
 
 	local tag = Instance.new("BillboardGui")
 	tag.Name = "NameTag"
-	tag.Size = UDim2.fromOffset(110, 26)
+	-- 크기를 스터드로 잡아서, 멀리서 볼 때 옆자리 이름표와 겹치지 않게 함
+	tag.Size = UDim2.fromScale(5, 1.5)
 	tag.StudsOffset = Vector3.new(0, 1.6, 0)
 	tag.MaxDistance = 90
 	tag.Adornee = head

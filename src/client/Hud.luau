@@ -51,7 +51,7 @@ local ghostNote: TextLabel
 
 -- 위기
 local crisisBorder: Frame
-local crisisStroke: UIStroke
+local crisisEdges: { Frame } = {}
 local crisisLabel: TextLabel
 local rescueButton: TextButton
 local rescueSent = false
@@ -229,17 +229,26 @@ local function buildFlightPanels()
 end
 
 local function buildCrisis()
+	-- 화면 가장자리의 붉은 테두리. 테두리 효과(UIStroke)는 틀 바깥에 그려져 화면 밖으로 나가므로 막대 4개로 그림.
 	crisisBorder = Ui.frame(flashRoot, "CrisisBorder", {
 		Size = UDim2.fromScale(1, 1),
 		Visible = false,
 	})
-	crisisStroke = Ui.make("UIStroke", {
-		Color = C.Red,
-		Thickness = 22,
-		Transparency = 0.3,
-		ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-		Parent = crisisBorder,
-	})
+	local thickness = 22
+	local function edge(name: string, anchor: Vector2, position: UDim2, size: UDim2)
+		local bar = Ui.frame(crisisBorder, name, {
+			AnchorPoint = anchor,
+			Position = position,
+			Size = size,
+			BackgroundColor3 = C.Red,
+			BackgroundTransparency = 0.3,
+		})
+		table.insert(crisisEdges, bar)
+	end
+	edge("Top", Vector2.new(0, 0), UDim2.fromScale(0, 0), UDim2.new(1, 0, 0, thickness))
+	edge("Bottom", Vector2.new(0, 1), UDim2.fromScale(0, 1), UDim2.new(1, 0, 0, thickness))
+	edge("Left", Vector2.new(0, 0), UDim2.fromOffset(0, thickness), UDim2.new(0, thickness, 1, -thickness * 2))
+	edge("Right", Vector2.new(1, 0), UDim2.new(1, 0, 0, thickness), UDim2.new(0, thickness, 1, -thickness * 2))
 	rescueButton = Ui.button(root, "RescueButton", "", 26, C.Orange, {
 		AnchorPoint = Vector2.new(0.5, 1),
 		Position = UDim2.new(0.5, 0, 1, -196),
@@ -302,7 +311,7 @@ end
 
 local function buildLaunch()
 	-- 큰 숫자는 전광판 아래, 선장 머리 위(외창 자리)에
-	countdownLabel = Ui.label(root, "Countdown", "", 130, {
+	countdownLabel = Ui.bigLabel(root, "Countdown", "", 130, {
 		AnchorPoint = Vector2.new(0.5, 0.5),
 		Position = UDim2.fromScale(0.5, 0.42),
 		Size = UDim2.fromOffset(400, 150),
@@ -745,7 +754,9 @@ local function updateFlight()
 	crisisLabel.Visible = crisis
 	if crisis then
 		local pulse = 0.5 + 0.5 * math.sin(os.clock() * 9)
-		crisisStroke.Transparency = 0.15 + 0.5 * pulse
+		for _, bar in ipairs(crisisEdges) do
+			bar.BackgroundTransparency = 0.15 + 0.5 * pulse
+		end
 		crisisLabel.Text = string.format("충격파 접근! 약 %d초 뒤 도달", math.ceil(eta))
 	end
 	-- 서버가 받아 주지 않았으면(위기가 막 끝났을 때 등) 잠시 뒤 버튼을 다시 보여 줌

@@ -18,6 +18,7 @@ local Board = {}
 local C = Ui.Colors
 local PIXELS_PER_STUD = 30
 local WIDTH = Config.World.BoardWidth * PIXELS_PER_STUD
+local HEIGHT = Config.World.BoardHeight * PIXELS_PER_STUD
 
 local gui: SurfaceGui? = nil
 local headLabel: TextLabel
@@ -55,6 +56,7 @@ local function build(board: BasePart)
 		LightInfluence = 0,
 		Brightness = 1.5,
 		ResetOnSpawn = false,
+		ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
 		Parent = playerGui,
 	})
 	gui = surface
@@ -69,8 +71,9 @@ local function build(board: BasePart)
 		Size = UDim2.new(1, 0, 0, 52),
 		TextColor3 = C.Dim,
 	})
-	mainLabel = Ui.label(back, "Main", "", 128, {
-		Position = UDim2.fromOffset(0, 58),
+	mainLabel = Ui.bigLabel(back, "Main", "", 128, {
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.fromScale(0.5, 58 / HEIGHT),
 		Size = UDim2.new(1, 0, 0, 136),
 		TextColor3 = C.Cyan,
 	})
@@ -179,8 +182,8 @@ function Board.update(_dt: number)
 	buildFrame.Visible = phase == "Build"
 	mainLabel.Visible = phase ~= "Build"
 	subLabel.Visible = true
-	leftLabel.Text = ""
-	rightLabel.Text = ""
+	local leftText = ""
+	local rightText = ""
 
 	if phase == "Join" then
 		setRoute(false)
@@ -226,9 +229,9 @@ function Board.update(_dt: number)
 		subLabel.Text = "속도 " .. Fmt.speed(f.speed)
 		subLabel.TextColor3 = C.Text
 		local combo = State.number("Combo")
-		leftLabel.Text = if combo > 0 then string.format("콤보 x%d", combo) else ""
+		leftText = if combo > 0 then string.format("콤보 x%d", combo) else ""
 		local eta = State.number("Eta")
-		rightLabel.Text = if eta < Config.Crisis.EtaLimit then string.format("충격파 %d초", math.ceil(eta)) else ""
+		rightText = if eta < Config.Crisis.EtaLimit then string.format("충격파 %d초", math.ceil(eta)) else ""
 		placeMark(rocketMark, f.km, true)
 		placeMark(waveMark, f.waveKm, true)
 		placeMark(recordMark, State.number("BestKm"), State.number("BestKm") > 0)
@@ -244,6 +247,8 @@ function Board.update(_dt: number)
 		placeMark(waveMark, State.number("WaveKm"), true)
 		placeMark(recordMark, State.number("BestKm"), State.number("BestKm") > 0)
 	end
+	leftLabel.Text = leftText
+	rightLabel.Text = rightText
 end
 
 return Board

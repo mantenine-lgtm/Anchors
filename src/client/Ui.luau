@@ -114,6 +114,30 @@ function Ui.label(parent: Instance, name: string, text: string, size: number, pr
 	return label
 end
 
+-- 글자 크기(TextSize)는 100 까지만 되므로, 그보다 큰 글자는 UIScale 로 키웁니다.
+-- 위치와 크기는 바깥 틀(이름 + "Holder")이 갖고, 돌려주는 글자는 그 틀을 꽉 채웁니다.
+-- Position 은 비율(Scale)로만 주세요.
+local HOLDER_PROPS = { AnchorPoint = true, Position = true, Size = true, ZIndex = true }
+
+function Ui.bigLabel(parent: Instance, name: string, text: string, size: number, props: { [string]: any }?): TextLabel
+	local factor = math.max(size / 100, 1)
+	local holder = Ui.frame(parent, name .. "Holder", {})
+	local labelProps: { [string]: any } = {}
+	if props then
+		for key, value in pairs(props) do
+			if HOLDER_PROPS[key] then
+				(holder :: any)[key] = value
+			else
+				labelProps[key] = value
+			end
+		end
+	end
+	local full = holder.Size
+	holder.Size = UDim2.new(full.X.Scale / factor, full.X.Offset / factor, full.Y.Scale / factor, full.Y.Offset / factor)
+	Ui.make("UIScale", { Scale = factor, Parent = holder })
+	return Ui.label(holder, name, text, size / factor, labelProps)
+end
+
 function Ui.button(parent: Instance, name: string, text: string, size: number, color: Color3, props: { [string]: any }?): TextButton
 	local button = Ui.make("TextButton", {
 		Name = name,
