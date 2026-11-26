@@ -1,0 +1,232 @@
+--!strict
+-- ROFLY 데모 1의 모든 수치. 밸런스는 이 파일만 고치면 됩니다.
+-- 비행 수치는 기획서 '수치 밸런스' 탭 1차 안(시뮬레이터 v7)과 같습니다.
+-- "임시"라고 적힌 값은 기획서에 수치가 없어서 데모 1을 만들며 새로 잡은 값입니다.
+
+local Config = {}
+
+Config.Version = "demo1"
+
+-- 페이즈 길이(초)
+Config.Phase = {
+	Join = 30, -- 참여 확인 ("붕괴까지" 타이머)
+	JoinAllReady = 5, -- 서버의 모든 사람이 탑승을 누르면 이만큼만 더 기다림
+	Build = 10, -- 임시: 본문은 45초. 데모 1은 기본 부품 자동 장착이라 줄임
+	Countdown = 10,
+	Results = 20,
+	FlightMax = 600, -- 안전장치: 이보다 길어지면 비행을 끝냄
+}
+
+-- 비행 계산 (FlightSim.luau 가 사용)
+Config.Flight = {
+	Dt = 0.05, -- 계산 한 칸(초)
+	RefPower = 10, -- 파워 자릿수 기준 (신규 부품 1개)
+	BaseSpeed = 0.00532, -- 기준 발사 속도 (km/s)
+	EngineExp = 0.2, -- 엔진 자릿수 1당 발사 속도 10^0.2배
+	HotRate = 0.10, -- 최대 출력 구간: 초당 속도 증가율
+	CruiseRate = 0.05, -- 순항 구간
+	SailRate = 0.03, -- 솔라 세일 구간
+	DecayRate = 0.08, -- 관성 구간: 초당 속도 감소율
+	HotBase = 0, -- 최대 출력 시간 = HotBase + HotPerDigit × 방열판 자릿수
+	HotPerDigit = 8,
+	FuelBase = 16, -- 연료 시간 = FuelBase + FuelPerDigit × 연료탱크 자릿수
+	FuelPerDigit = 9,
+	SailBase = 14, -- 세일 시간 = SailBase + SailPerDigit × 솔라 세일 자릿수
+	SailPerDigit = 11,
+	KickBase = 0.40, -- 미션 1회 성공 가속 (항법컴퓨터)
+	NavExp = 0.2,
+	ComboStepBase = 0.065, -- 콤보 1단계당 가속 증가 (코어)
+	CoreExp = 0.2,
+	ComboMax = 5,
+	PerfectMultiplier = 1.2, -- 전원 성공 보너스
+	BoostDecayTime = 12, -- 미션 가속이 줄어드는 시간 상수(초)
+	WaveStartRatio = 0.5, -- 충격파 시작 속도 = 로켓 발사 속도 × 이 값
+	WaveRate = 0.06, -- 충격파 초당 가속률
+	WaveRateGrowth = 0.0003, -- 충격파 가속률이 초마다 커지는 양
+	WaveGraceTime = 1.0, -- 발사 직후 이 시간 동안은 따라잡히지 않음
+	RouteEnd = 800000, -- 폭발권 밖 (km)
+}
+
+-- 방향 미션
+Config.Mission = {
+	FirstAt = 6, -- 첫 미션 판정 시각(비행 시작 후 초)
+	Interval = 9, -- 판정 간격(초)
+	ComboRule = 0.8, -- 팀 성공률이 이 이상이면 콤보 +1, 아니면 0
+	-- 챕터별 입력 수와 제한 시간(초): 대기권, 지구 궤도, 달, 태양계
+	ByChapter = {
+		{ Inputs = 3, Limit = 3.0 },
+		{ Inputs = 4, Limit = 2.67 },
+		{ Inputs = 5, Limit = 2.33 },
+		{ Inputs = 6, Limit = 2.0 },
+	},
+	InputGrace = 0.25, -- 통신 지연 여유(초)
+	WrongInputResets = true, -- 틀리면 처음부터 다시 (제한 시간 안에서)
+	AfkMissions = 5, -- 이만큼 연속으로 아무 입력이 없으면 판정에서 빠지고 코인 절반
+	Keys = { "Up", "Left", "Right", "Down", "Jump" },
+	ResultShowSeconds = 1.6,
+}
+
+-- 선장 발사 버튼
+Config.Captain = {
+	PerfectWindow = 0.12, -- 0초와의 차이가 이 안이면 완벽
+	PerfectBonus = 0.10, -- 초반 속도 +10%
+	GoodWindow = 0.35,
+	GoodBonus = 0.05,
+	EarlyLimit = 1.0, -- 0초보다 이만큼 일찍부터 누를 수 있음
+	AutoDelay = 0.6, -- 안 누르면 0초에서 이만큼 지나 자동 발사
+	CloseupSeconds = 3, -- 카운트다운 시작 때 선장 클로즈업
+	GaugeSeconds = 3, -- 발사 게이지가 움직이는 시간
+}
+
+-- 구원 연료 (임시: 기획서에 수치 없음. 시뮬레이션으로 잡음)
+-- 쓰는 순간 로켓 속도를 충격파 속도 × Match 까지 끌어올리고, Hold 초 동안 충격파와 같은 비율(+Extra)로 가속.
+-- 신규 10명 기준 위기 막바지에 쓰면 거리 약 1.7~2.2배.
+Config.Rescue = {
+	TicketCost = 1,
+	Match = 1.0,
+	Hold = 5,
+	Extra = 0,
+	CloseupSeconds = 2, -- 사용자 좌석 클로즈업
+	ThanksWindow = 5, -- 감사 버튼이 떠 있는 시간(초)
+	ThanksGrace = 1, -- 서버가 더 받아 주는 여유(초)
+	ThanksCoins = 5, -- 임시: 감사를 누른 사람이 받는 코인
+}
+
+-- 위기 구간: 충격파 도달 예상 시간이 EnterEta 이하면 시작
+Config.Crisis = {
+	EnterEta = 10,
+	ExitEta = 12.5,
+	CheckInterval = 0.25,
+	EtaLimit = 30, -- 이보다 먼 도달 시간은 계산하지 않음
+	MinFlightTime = 5, -- 발사 직후에는 위기를 띄우지 않음
+}
+
+-- 봇 승무원 (데모 전용)
+Config.Bots = {
+	FillTo = 10, -- 사람이 모자라면 이 인원까지 봇으로 채움
+	Skill = "normal",
+	-- 챕터별 미션 성공 확률: 대기권, 지구 궤도, 달, 태양계
+	Skills = {
+		{ Id = "normal", Name = "보통", Rates = { 0.90, 0.85, 0.80, 0.75 } },
+		{ Id = "good", Name = "잘함", Rates = { 0.97, 0.94, 0.91, 0.88 } },
+		{ Id = "perfect", Name = "전원 성공", Rates = { 1, 1, 1, 1 } },
+		{ Id = "fail", Name = "전부 실패", Rates = { 0, 0, 0, 0 } },
+	},
+	ThanksChance = 0.7, -- 봇이 감사 하트를 보낼 확률 (지표에는 세지 않음)
+}
+
+-- 부품
+Config.Parts = {
+	Types = {
+		{ Id = "engine", Name = "엔진" },
+		{ Id = "heat", Name = "방열판" },
+		{ Id = "fuel", Name = "연료탱크" },
+		{ Id = "sail", Name = "솔라 세일" },
+		{ Id = "nav", Name = "항법컴퓨터" },
+		{ Id = "core", Name = "코어" },
+	},
+	RarityNames = { "일반", "희귀", "영웅", "전설" },
+	RarityPower = { 10, 100, 1000, 10000 },
+	LevelMultiplier = { 1.0, 1.3, 1.7, 2.2, 2.8, 3.6, 4.6, 6.0, 7.7, 10.0 },
+	SlotBonus = 0.01, -- 꽂은 부품 1개당 그 종류 합계 +1%
+}
+
+-- 장비 묶음 (데모 1은 전원 같은 장비. 디버그 패널에서 바꿈)
+Config.Gear = {
+	Default = "common1",
+	Presets = {
+		{ Id = "common1", Name = "일반 Lv1", Rarity = 1, Level = 1 },
+		{ Id = "rare5", Name = "희귀 Lv5", Rarity = 2, Level = 5 },
+		{ Id = "epic5", Name = "영웅 Lv5", Rarity = 3, Level = 5 },
+		{ Id = "legend10", Name = "전설 Lv10", Rarity = 4, Level = 10 },
+	},
+}
+
+-- 보상 (임시)
+Config.Rewards = {
+	CoinsPerKm = 10, -- 코인 = 거리(km) × 이 값 (버림)
+	AfkCoinFactor = 0.5,
+	AwardTickets = 1, -- 시상 1개당 티켓
+	StartTickets = 0,
+	ExpectedRate = 0.85, -- 빌드 페이즈 예상 거리에 쓰는 미션 성공률
+}
+
+-- 루트: 챕터와 스테이지 끝 지점(km). 이름은 데모 스테이지 5개만 확정.
+Config.Route = {
+	Chapters = {
+		{ Name = "대기권", EndKm = 100 },
+		{ Name = "지구 궤도", EndKm = 36000 },
+		{ Name = "달", EndKm = 400000 },
+		{ Name = "태양계", EndKm = 800000 },
+	},
+	Stages = {
+		{ Name = "붕괴하는 고향 행성", EndKm = 3, Chapter = 1 },
+		{ Name = "폭풍 구름층", EndKm = 10, Chapter = 1 },
+		{ Name = "화산재 하늘", EndKm = 30, Chapter = 1 },
+		{ Name = "오로라 하늘", EndKm = 100, Chapter = 1 },
+		{ Name = "궤도 고철 지대", EndKm = 400, Chapter = 2 },
+		{ Name = "지구 궤도 2", EndKm = 2000, Chapter = 2 },
+		{ Name = "지구 궤도 3", EndKm = 10000, Chapter = 2 },
+		{ Name = "지구 궤도 4", EndKm = 36000, Chapter = 2 },
+		{ Name = "달 1", EndKm = 80000, Chapter = 3 },
+		{ Name = "달 2", EndKm = 180000, Chapter = 3 },
+		{ Name = "달 3", EndKm = 400000, Chapter = 3 },
+		{ Name = "태양계 1", EndKm = 500000, Chapter = 4 },
+		{ Name = "태양계 2", EndKm = 600000, Chapter = 4 },
+		{ Name = "태양계 3", EndKm = 700000, Chapter = 4 },
+		{ Name = "태양계 4", EndKm = 800000, Chapter = 4 },
+	},
+}
+
+-- 회색 상자 월드 치수(스터드). 로켓은 원점에 서 있고 배경이 움직입니다.
+Config.World = {
+	GroundSize = 2048,
+	MountRadius = 46,
+	MountHeight = 4,
+	RocketBaseY = 12, -- 선체 바닥
+	RocketTopY = 212, -- 선체 꼭대기(코 제외)
+	HullRadius = 26,
+	CabinRadius = 24,
+	CabinFloorY = 120,
+	CabinCeilY = 160,
+	WallSegments = 36,
+	WindowHalfAngle = 50, -- 외창이 차지하는 각도의 절반(도)
+	WindowBottomY = 123,
+	WindowTopY = 146,
+	BoardWidth = 34, -- 전광판은 외창 위 벽에서 조금 앞으로 나와 매달려 있음 (둥근 벽에 모서리가 묻히지 않게)
+	BoardHeight = 11,
+	BoardY = 150.5,
+	BoardZ = 13,
+	SeatRadius = 19,
+	SeatSpacing = 5.5,
+	SeatFirstRowY = 125,
+	SeatRowHeight = 7,
+	SeatsPerRowMax = 10,
+	SeatReclineDeg = 40, -- 의자가 뒤로 젖혀진 각도
+	SeatRootOffset = 1.9, -- 의자 판에서 캐릭터 중심까지 높이
+	SpawnDistance = 95, -- 로켓 중심에서 리스폰 지점까지
+	StudsPerMeter = 3.57,
+}
+
+-- 소리 (임시: Roblox 기본 내장 소리. 나중에 크리에이터 스토어 소리로 교체)
+Config.Sounds = {
+	Countdown = { Id = "rbxasset://sounds/electronicpingshort.wav", Volume = 0.6 },
+	Launch = { Id = "rbxasset://sounds/Rocket shot.wav", Volume = 0.9 },
+	MissionSuccess = { Id = "rbxasset://sounds/victory.wav", Volume = 0.35 },
+	Combo = { Id = "rbxasset://sounds/bass.wav", Volume = 0.6 },
+	CrisisAlarm = { Id = "rbxasset://sounds/electronicpingshort.wav", Volume = 0.8 },
+	ItemUse = { Id = "rbxasset://sounds/Rocket whoosh 01.wav", Volume = 0.9 },
+	Press = { Id = "rbxasset://sounds/clickfast.wav", Volume = 0.5 },
+	Wrong = { Id = "rbxasset://sounds/uuhhh.mp3", Volume = 0.25 },
+	Caught = { Id = "rbxasset://sounds/impact_explosion_03.mp3", Volume = 0.9 },
+	Thunder = { Id = "rbxasset://sounds/HalloweenThunder.wav", Volume = 0.25 },
+	Thanks = { Id = "rbxasset://sounds/switch.wav", Volume = 0.5 },
+}
+
+-- 디버그 패널을 쓸 수 있는 사람
+Config.Debug = {
+	AllowInStudio = true,
+	AllowCreator = true,
+}
+
+return Config
