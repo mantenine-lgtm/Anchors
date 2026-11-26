@@ -195,18 +195,12 @@ function Board.update(_dt: number)
 	elseif phase == "Build" then
 		setRoute(false)
 		headLabel.Text = string.format("로켓 조립 · 승무원 %d명 · %s", State.number("CrewCount"), Fmt.clock(State.phaseLeft()))
-		local info = State.build()
-		if info then
-			for id, bar in pairs(buildBars) do
-				local total = info.totals[id]
-				if type(total) ~= "number" then
-					total = 0
-				end
-				-- 막대 길이는 자릿수 기준 (파워가 10배가 될 때마다 한 칸)
-				local digits = math.log10(1 + total / Config.Flight.RefPower)
-				bar.fill.Size = UDim2.fromScale(math.clamp(digits / 5, 0.02, 1), 1)
-				bar.value.Text = Fmt.comma(total)
-			end
+		for id, bar in pairs(buildBars) do
+			local total = State.buildTotal(id)
+			-- 막대 길이는 자릿수 기준 (파워가 10배가 될 때마다 한 칸). 가장 센 구성(전설 Lv10 50명)이 약 5.9 자리라 6 칸으로 나눔
+			local digits = math.log10(1 + total / Config.Flight.RefPower)
+			bar.fill.Size = UDim2.fromScale(math.clamp(digits / 6, 0.02, 1), 1)
+			bar.value.Text = Fmt.comma(total)
 		end
 		subLabel.Text = "예상 거리 " .. Fmt.km(State.number("ExpectedKm"))
 		subLabel.TextColor3 = C.Yellow
@@ -241,7 +235,7 @@ function Board.update(_dt: number)
 		headLabel.Text = if State.flag("Escaped") then "탈출 성공" else "비행 종료"
 		mainLabel.Text = Fmt.km(km)
 		mainLabel.TextColor3 = C.Yellow
-		subLabel.Text = Route.stage(Route.stageIndex(km)).Name
+		subLabel.Text = Route.arrivalName(km, State.flag("Escaped"))
 		subLabel.TextColor3 = C.Text
 		placeMark(rocketMark, km, true)
 		placeMark(waveMark, State.number("WaveKm"), true)

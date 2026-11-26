@@ -43,7 +43,7 @@ type Sky = {
 	Density: number,
 	Haze: number,
 	Color: Color3,
-	Decay: Color3,
+	Decay: Color3, -- 해에서 먼 쪽 하늘빛. Atmosphere.Glare 가 0 보다 커야 보임 (지금은 0 이라 Color 만 보임)
 	Streak: Color3,
 	Clouds: number, -- 구름이 보이는 정도 (0~1)
 }
@@ -153,6 +153,22 @@ local function streakAngle(front: boolean): number
 	return random:NextNumber() * math.pi * 2
 end
 
+-- 구름이 놓일 방향(각도)을 뽑음. 구름 공이 바깥 시점 카메라를 통째로 삼키면 화면이 갑자기 가려졌다 걷히므로,
+-- 카메라 가까이 오는 자리는 다시 뽑습니다.
+local function cloudAngle(radius: number, size: number): number
+	local cameraX, cameraZ = W.OutsideCamera[1], W.OutsideCamera[3]
+	local angle = random:NextNumber() * math.pi * 2
+	for _ = 1, 12 do
+		local dx = math.sin(angle) * radius - cameraX
+		local dz = math.cos(angle) * radius - cameraZ
+		if math.sqrt(dx * dx + dz * dz) > size / 2 + 20 then
+			break
+		end
+		angle = random:NextNumber() * math.pi * 2
+	end
+	return angle
+end
+
 local function buildStreaks()
 	for i = 1, FRONT_STREAKS + AROUND_STREAKS do
 		local front = i <= FRONT_STREAKS
@@ -179,10 +195,11 @@ local function buildStreaks()
 		part.Transparency = 1
 		local size = 90 + random:NextNumber() * 110
 		part.Size = Vector3.new(size, size, size)
+		local radius = 190 + random:NextNumber() * 260
 		local cloud: Cloud = {
 			part = part,
-			radius = 190 + random:NextNumber() * 260,
-			angle = random:NextNumber() * math.pi * 2,
+			radius = radius,
+			angle = cloudAngle(radius, size),
 			y = STREAK_BOTTOM + random:NextNumber() * (STREAK_TOP - STREAK_BOTTOM),
 			size = size,
 		}
@@ -262,7 +279,9 @@ local function lerpNumber(a: number, b: number, t: number): number
 end
 
 local function blendSky(target: Sky, t: number)
-	sky.ClockTime = lerpNumber(sky.ClockTime, target.ClockTime, t)
+	-- 시각은 24시간이 한 바퀴이므로 가까운 쪽으로 돌려 섞음 (21시에서 0시로 갈 때 낮을 거치지 않게)
+	local hours = (target.ClockTime - sky.ClockTime + 12) % 24 - 12
+	sky.ClockTime = (sky.ClockTime + hours * t) % 24
 	sky.Brightness = lerpNumber(sky.Brightness, target.Brightness, t)
 	sky.Ambient = sky.Ambient:Lerp(target.Ambient, t)
 	sky.Outdoor = sky.Outdoor:Lerp(target.Outdoor, t)
@@ -425,7 +444,7 @@ function Backdrop.update(dt: number)
 			local y = cloud.y - speedStuds * 0.45 * dt
 			if y < STREAK_BOTTOM - 100 then
 				y += span + 200
-				cloud.angle = random:NextNumber() * math.pi * 2
+				cloud.angle = cloudAngle(cloud.radius, cloud.size)
 			end
 			cloud.y = y
 			part.Transparency = 1 - 0.5 * visible

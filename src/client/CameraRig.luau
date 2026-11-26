@@ -22,6 +22,9 @@ local player = Players.LocalPlayer
 
 local FIELD_OF_VIEW = 70
 local HIDE_HALF_ANGLE = 48 -- 좌석 쪽(180도)에서 이 각도 안의 벽을 숨김
+local BOARD_FRAME = 0.6 -- 전광판 테두리가 화면 아래로 더 나온 길이(스터드)
+local HANDOVER_LOCK = 4 -- 판이 끝난 뒤 새 캐릭터를 기다리며 조작을 잠가 두는 최대 시간(초)
+local HANDOVER_MAX = 20 -- 새 캐릭터를 기다리며 발사장을 비추는 최대 시간(초). 넘으면 기본 카메라로 넘김
 
 local view = "Interior" -- "Interior" 선실 | "Exterior" 바깥
 local scripted = false
@@ -32,6 +35,14 @@ local closeupUntil = 0
 local viewButton: TextButton
 local controls: any = nil
 local highlight: Highlight? = nil
+local revealAt = 0
+local boardPart: BasePart? = nil
+local handover = false
+local handoverFrom: Model? = nil
+local handoverStart = 0
+local subjectPending = false -- 기다리다 넘긴 뒤, 늦게 나타날 새 캐릭터를 카메라가 따라가게 해야 하는지
+local movementLocked = false -- 지금 바라는 조작 상태 (타 있는 동안 true)
+local resetToken = 0
 
 -- ------------------------------------------------------------ 조작과 기본 UI 켜고 끄기
 local function getControls(): any
@@ -52,28 +63,39 @@ local function getControls(): any
 	return controls
 end
 
-local function setMovement(enabled: boolean)
+-- 타 있는 동안 이동·점프·캐릭터 초기화를 잠그고, 내리면 풉니다. 상태가 바뀔 때만 일합니다.
+local function lockMovement(locked: boolean)
+	if movementLocked == locked then
+		return
+	end
+	movementLocked = locked
 	task.spawn(function()
 		local c = getControls()
 		if c then
 			pcall(function()
-				if enabled then
-					c:Enable()
-				else
+				-- 조작 모듈을 기다리는 사이에 다시 바뀌었을 수 있으므로 지금 바라는 상태로 맞춤
+				if movementLocked then
 					c:Disable()
+				else
+					c:Enable()
 				end
 			end)
 		end
 	end)
 	-- 기본 터치 조작(이동 스틱·점프 버튼)이 미션 버튼과 겹치지 않게 숨김
 	pcall(function()
-		GuiService.TouchControlsEnabled = enabled
+		GuiService.TouchControlsEnabled = not locked
 	end)
 	-- 타 있는 동안 캐릭터 초기화를 막음 (자리에서 떨어지지 않게)
+	resetToken += 1
+	local token = resetToken
 	task.spawn(function()
 		for _ = 1, 8 do
+			if token ~= resetToken then
+				return -- 그 사이에 다시 바뀌었으면 새 요청이 맡음
+			end
 			local ok = pcall(function()
-				StarterGui:SetCore("ResetButtonCallback", enabled)
+				StarterGui:SetCore("ResetButtonCallback", not locked)
 			end)
 			if ok then
 				break
@@ -120,7 +142,51 @@ local function interiorCFrame(): CFrame
 end
 
 local function exteriorCFrame(): CFrame
-	return CFrame.lookAt(Vector3.new(130, 90, 205), Vector3.new(0, 128, 0))
+	local at = W.OutsideCamera
+	return CFrame.lookAt(Vector3.new(at[1], at[2], at[3]), Vector3.new(0, 128, 0))
+end
+
+-- 발사장 리스폰 지점을 뒤에서 비추는 자리 (새 캐릭터가 나타났을 때 기본 카메라가 잡는 구도와 비슷하게)
+local function padCFrame(): CFrame
+	return CFrame.lookAt(Vector3.new(0, 9, W.SpawnDistance + 12), Vector3.new(0, 5, W.SpawnDistance))
+end
+
+local function findBoard(): BasePart?
+	if boardPart and boardPart.Parent then
+		return boardPart
+	end
+	local rofly = Workspace:FindFirstChild("Rofly")
+	local rocket = rofly and rofly:FindFirstChild("Rocket")
+	local board = rocket and rocket:FindFirstChild("Board")
+	if board and board:IsA("BasePart") then
+		boardPart = board
+		return board
+	end
+	return nil
+end
+
+-- 선실 시점에서 전광판(테두리 포함) 아래 끝이 화면 높이의 어디에 오는지 (0 = 맨 위, 1 = 맨 아래).
+-- 카메라의 세로 시야각은 창 모양과 상관없이 같으므로 이 비율은 창이 넓든 좁든 같습니다.
+-- (휴대폰의 안전 영역 여백만큼은 화면 글자의 높이와 어긋나는데, 그만큼은 Hud 가 틈을 넉넉히 둡니다.)
+-- 승무원 수에 따라 카메라 자리가 달라져도 따라갑니다.
+local function boardBottom(): number
+	local board = findBoard()
+	if not board then
+		return State.BoardBottomDefault
+	end
+	local cameraCFrame = interiorCFrame()
+	local half = board.Size / 2
+	local tangent = math.tan(math.rad(FIELD_OF_VIEW / 2))
+	local lowest = 0
+	for _, side in ipairs({ -1, 1 }) do
+		local corner = board.CFrame * Vector3.new(side * half.X, -half.Y - BOARD_FRAME, -half.Z)
+		local point = cameraCFrame:PointToObjectSpace(corner)
+		if point.Z > -1 then
+			return State.BoardBottomDefault -- 카메라 뒤쪽이면 계산하지 않음
+		end
+		lowest = math.max(lowest, 0.5 - (point.Y / -point.Z) / (2 * tangent))
+	end
+	return math.clamp(lowest, 0.1, 0.6)
 end
 
 local function seatPosition(seat: number): Vector3?
@@ -147,6 +213,19 @@ local function closeupCFrame(seat: number): CFrame?
 	local inward = flat.Unit
 	local eye = position + inward * 10 + Vector3.new(0, 5.5, 0)
 	return CFrame.lookAt(eye, position + Vector3.new(0, 3, 0))
+end
+
+-- 1인칭까지 확대한 채로 타면 기본 카메라가 내 캐릭터를 투명하게 만든 채 멈추므로, 다시 보이게 함
+local function revealCharacter()
+	local character = player.Character
+	if not character then
+		return
+	end
+	for _, item in ipairs(character:GetDescendants()) do
+		if item:IsA("BasePart") or item:IsA("Decal") then
+			item.LocalTransparencyModifier = 0
+		end
+	end
 end
 
 -- 내 캐릭터에 테두리를 둘러 어디 앉았는지 보이게 함
@@ -188,6 +267,10 @@ function CameraRig.view(): string
 end
 
 function CameraRig.init()
+	-- 발사장에서 1인칭까지 확대하면 마우스가 화면 가운데에 묶여 탑승 버튼을 누를 수 없으므로 막음
+	pcall(function()
+		player.CameraMinZoomDistance = 6
+	end)
 	local _, root = Ui.screen("RoflyCamera", 11)
 	viewButton = Ui.button(root, "ViewButton", "시점: 선실", 18, C.PanelLight, {
 		AnchorPoint = Vector2.new(1, 0),
@@ -208,9 +291,11 @@ function CameraRig.init()
 		if phase == "Countdown" then
 			-- 카운트다운 시작: 선장 클로즈업
 			CameraRig.closeup(State.number("CaptainSeat"), Config.Captain.CloseupSeconds)
-		elseif phase == "Build" then
+		elseif phase == "Build" or phase == "Join" then
+			-- 새 판: 선실 시점으로 되돌리고, 지난 판의 클로즈업이 남아 있으면 지움
 			view = "Interior"
 			viewButton.Text = "시점: 선실"
+			closeupUntil = 0
 		end
 	end)
 	State.on("Launched", function()
@@ -244,32 +329,83 @@ function CameraRig.update(dt: number)
 	updateHighlight(aboard)
 
 	if not aboard then
+		State.boardBottom = State.BoardBottomDefault
 		if scripted then
-			scripted = false
-			setWallsHidden(false)
-			setMovement(true)
-			camera.CameraType = Enum.CameraType.Custom
-			camera.FieldOfView = FIELD_OF_VIEW
+			-- 판이 끝나면 서버가 캐릭터를 새로 만들어 발사장에 놓습니다. 새 캐릭터가 나타나기 전에 기본 카메라로
+			-- 넘기면 따라갈 대상이 없어 빈 선실이나 선체 벽이 잠깐 보이므로, 나타날 때까지 발사장을 비춥니다.
+			local clock = os.clock()
+			if not handover then
+				handover = true
+				handoverFrom = player.Character
+				handoverStart = clock
+				setWallsHidden(false)
+			end
 			local character = player.Character
 			local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-			if humanoid then
+			local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+			-- 새 캐릭터인지: 판 중의 캐릭터와 다르거나, 좌석에 고정돼 있지 않으면 새 캐릭터로 봄
+			local fresh = character ~= handoverFrom or (rootPart ~= nil and rootPart:IsA("BasePart") and not rootPart.Anchored)
+			local arrived = character ~= nil and humanoid ~= nil and fresh and character:IsDescendantOf(Workspace)
+			local waited = clock - handoverStart
+			if not arrived and waited < HANDOVER_MAX then
+				-- 아바타를 불러오는 데 오래 걸려도 조작 잠금은 길게 끌지 않음
+				if waited >= HANDOVER_LOCK then
+					lockMovement(false)
+				end
+				if camera.CameraType ~= Enum.CameraType.Scriptable then
+					camera.CameraType = Enum.CameraType.Scriptable
+				end
+				camera.CFrame = padCFrame()
+				camera.Focus = CFrame.new(0, 5, W.SpawnDistance)
+				camera.FieldOfView = FIELD_OF_VIEW
+				return
+			end
+			scripted = false
+			handover = false
+			handoverFrom = nil
+			lockMovement(false)
+			camera.CameraType = Enum.CameraType.Custom
+			camera.FieldOfView = FIELD_OF_VIEW
+			if arrived and humanoid then
 				camera.CameraSubject = humanoid
+			end
+			-- 끝내 나타나지 않아 그냥 넘겼으면, 나중에 나타났을 때 카메라가 따라가게 표시해 둠
+			subjectPending = not arrived
+		elseif subjectPending then
+			-- 엔진이 새 캐릭터로 카메라를 알아서 돌려 주는지는 문서에 없어서, 따라갈 대상이 비었거나 사라진 것이면 직접 맞춤
+			local character = player.Character
+			local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+			if character and humanoid and character:IsDescendantOf(Workspace) then
+				subjectPending = false
+				local subject = camera.CameraSubject
+				if subject == nil or not subject:IsDescendantOf(Workspace) then
+					camera.CameraSubject = humanoid
+				end
 			end
 		end
 		return
 	end
+	subjectPending = false
+	handover = false
+	handoverFrom = nil
+	State.boardBottom = boardBottom()
 
 	if not scripted then
 		scripted = true
-		setMovement(false)
 		shake = 0
+		revealAt = 0
 	end
+	lockMovement(true) -- 넘기는 중에 풀렸다가 바로 다음 판이 시작된 경우에도 다시 잠김
 	-- 캐릭터가 새로 생기면 엔진이 카메라를 기본으로 되돌리므로 매번 다시 맞춤
 	if camera.CameraType ~= Enum.CameraType.Scriptable then
 		camera.CameraType = Enum.CameraType.Scriptable
 	end
 
 	local clock = os.clock()
+	if clock >= revealAt then
+		revealAt = clock + 0.25
+		revealCharacter()
+	end
 	local target: CFrame? = nil
 	local inCloseup = clock < closeupUntil
 	if inCloseup then
@@ -297,6 +433,8 @@ function CameraRig.update(dt: number)
 		cframe = cframe * CFrame.Angles(pitch, yaw, roll)
 	end
 	camera.CFrame = cframe
+	-- 연출 카메라에서는 엔진이 초점(Focus)을 옮겨 주지 않음. 선실 조명이 제대로 그려지게 선실로 맞춤.
+	camera.Focus = CFrame.new(0, W.CabinFloorY + 11, 0)
 	camera.FieldOfView = FIELD_OF_VIEW
 end
 

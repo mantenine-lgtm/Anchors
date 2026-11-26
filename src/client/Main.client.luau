@@ -2,6 +2,7 @@
 -- ROFLY 데모 1: 화면 모듈들을 차례로 켜고, 매 프레임 갱신합니다.
 -- 모듈 하나가 오류를 내도 나머지는 계속 돌도록 각각 따로 감쌉니다.
 
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local StarterGui = game:GetService("StarterGui")
@@ -33,6 +34,14 @@ for _, name in ipairs(MODULE_NAMES) do
 		warn(string.format("[ROFLY] 화면 모듈 %s 시작 실패: %s", name, tostring(result)))
 	end
 end
+
+-- 휴대폰은 가로 화면으로 (세로로 들면 화면 요소가 아주 작아짐)
+task.spawn(function()
+	local playerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
+	pcall(function()
+		(playerGui :: PlayerGui).ScreenOrientation = Enum.ScreenOrientation.LandscapeSensor
+	end)
+end)
 
 -- 내 화면 오른쪽 위와 겹치는 기본 UI(플레이어 목록 등)를 끔. 채팅은 그대로 둠.
 task.spawn(function()

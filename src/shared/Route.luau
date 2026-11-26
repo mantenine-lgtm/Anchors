@@ -29,6 +29,14 @@ function Route.stage(index: number): Stage
 	return stages[i]
 end
 
+-- 정산에 적는 도착 지점 이름. 루트 끝에 닿아 탈출했으면 마지막 스테이지 이름 대신 '폭발권 밖'.
+function Route.arrivalName(km: number, escaped: boolean): string
+	if escaped then
+		return Config.Route.EscapeName
+	end
+	return Route.stage(Route.stageIndex(km)).Name
+end
+
 function Route.stageStartKm(index: number): number
 	if index <= 1 then
 		return 0

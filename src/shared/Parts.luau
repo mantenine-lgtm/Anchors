@@ -56,18 +56,24 @@ export type Totals = {
 	core: number,
 }
 
--- 한 종류의 합계. 꽂은 부품 1개당 그 종류 합계 +1%.
+-- 한 종류의 합계. 센 순서로 줄 세워 k번째 부품은 1/k 만 더하고(인원이 늘어도 완만하게 오름),
+-- 꽂은 부품 1개당 그 종류 합계 +1%.
 local function sumType(loadouts: { Loadout }, typeId: string): number
-	local sum = 0
-	local count = 0
+	local powers: { number } = {}
 	for _, loadout in ipairs(loadouts) do
 		local power = loadout[typeId] or 0
 		if power > 0 then
-			sum += power
-			count += 1
+			table.insert(powers, power)
 		end
 	end
-	return sum * (1 + P.SlotBonus * count)
+	table.sort(powers, function(a: number, b: number): boolean
+		return a > b
+	end)
+	local sum = 0
+	for k, power in ipairs(powers) do
+		sum += power * (1 / k ^ P.RankExp)
+	end
+	return sum * (1 + P.SlotBonus * #powers)
 end
 
 -- 승무원 전원의 부품을 종류별로 합침

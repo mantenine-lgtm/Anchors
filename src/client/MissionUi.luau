@@ -324,7 +324,7 @@ function MissionUi.init()
 			usedTouch = true
 		end
 		local key = KEY_MAP[input.KeyCode]
-		if key and UserInputService:GetFocusedTextBox() == nil then
+		if key and not State.typing() then
 			press(key)
 		end
 	end)

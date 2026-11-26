@@ -67,11 +67,14 @@ function DebugPanel.init()
 	})
 	Ui.stroke(toggleButton, C.Purple, 2, 0)
 
-	local rows = 8
+	local rows = 9
+	-- 줄 간격 38, 버튼 높이 34: 판의 아래 끝이 504 라서 터치 점프 버튼(위 끝 510)을 덮지 않음
+	local rowPitch = 38
+	local rowHeight = 34
 	panel = Ui.panel(root, "DebugPanel", {
 		AnchorPoint = Vector2.new(1, 0),
 		Position = UDim2.new(1, -16, 0, 150),
-		Size = UDim2.fromOffset(300, rows * 44 + 12),
+		Size = UDim2.fromOffset(300, 8 + (rows - 1) * rowPitch + rowHeight + 8),
 		BackgroundTransparency = 0.1,
 		Visible = false,
 	})
@@ -80,8 +83,8 @@ function DebugPanel.init()
 	local row = 0
 	local function add(name: string, text: string, action: () -> ()): TextButton
 		local button = Ui.button(panel, name, text, 17, C.PanelLight, {
-			Position = UDim2.fromOffset(8, 8 + row * 44),
-			Size = UDim2.new(1, -16, 0, 38),
+			Position = UDim2.fromOffset(8, 8 + row * rowPitch),
+			Size = UDim2.new(1, -16, 0, rowHeight),
 		})
 		row += 1
 		button.Activated:Connect(action)
@@ -93,6 +96,9 @@ function DebugPanel.init()
 	end)
 	add("DebugTicket", "티켓 +1", function()
 		send("Ticket")
+	end)
+	add("DebugCoins", string.format("코인 +%d", Config.Debug.CoinGrant), function()
+		send("Coins")
 	end)
 	add("DebugCrisis", "위기 구간으로 건너뛰기", function()
 		send("Crisis")

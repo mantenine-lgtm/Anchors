@@ -1,7 +1,6 @@
 -- 판 진행: 참여 확인 → 빌드 → 카운트다운 → 비행 → 정산 을 계속 반복합니다.
 -- 거리·속도·충격파는 숫자로만 계산하고(FlightSim), 결과를 RoundState 속성으로 클라이언트에 알립니다.
 
-local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -134,6 +133,15 @@ local function showOptions()
 	state:SetAttribute("OptGear", options.gear)
 end
 
+-- 조립 화면에 쓸 값: 부품 종류별 합계와 이번 판 장비 이름.
+-- 긴 글자 하나로 묶지 않고 짧은 속성 여러 개로 보냅니다 (글자 속성은 길이 제한이 있을 수 있음).
+local function showBuild(totals: { [string]: number }?, gearName: string)
+	for _, info in ipairs(Config.Parts.Types) do
+		state:SetAttribute("Total_" .. info.Id, if totals then totals[info.Id] or 0 else 0)
+	end
+	state:SetAttribute("GearName", gearName)
+end
+
 -- ------------------------------------------------------------ 참여 확인
 local function runJoin(): { Player }
 	while true do
@@ -255,7 +263,7 @@ local function runBuild(joined: { Player }): any
 		table.insert(crew, newMember("b" .. tostring(i), Bots.name(i), nil, i))
 	end
 
-	-- 좌석: 선장은 맨 윗줄 가운데, 나머지는 가운데부터 (사람 먼저, 그다음 봇)
+	-- 좌석: 선장은 맨 윗줄 가운데, 나머지는 윗줄부터 채우고 줄 안에서는 가운데부터 (사람 먼저, 그다음 봇)
 	local captain = pickCaptain(crew)
 	local order = World.buildSeats(#crew)
 	local nextSeat = 1
@@ -291,16 +299,8 @@ local function runBuild(joined: { Player }): any
 
 	-- 부품 합계와 예상 거리
 	local loadouts = {}
-	local crewInfo = {}
 	for _, member in ipairs(crew) do
 		table.insert(loadouts, member.loadout)
-		table.insert(crewInfo, {
-			name = member.name,
-			seat = member.seat,
-			bot = member.isBot,
-			captain = member.isCaptain,
-			userId = member.userId,
-		})
 	end
 	local totals = Parts.totals(loadouts)
 	local expectedKm = FlightSim.predict(totals, 0, Config.Rewards.ExpectedRate)
@@ -313,11 +313,7 @@ local function runBuild(joined: { Player }): any
 	state:SetAttribute("ExpectedKm", expectedKm)
 	state:SetAttribute("BestKm", bestKm)
 	resetFlightState()
-	state:SetAttribute("BuildJson", HttpService:JSONEncode({
-		crew = crewInfo,
-		totals = totals,
-		gear = Parts.preset(options.gear).Name,
-	}))
+	showBuild(totals :: any, Parts.preset(options.gear).Name)
 
 	local round = {
 		number = roundNumber,
@@ -748,7 +744,7 @@ local function runResults(round: any)
 		seconds = sim.t,
 		escaped = sim.escaped,
 		stage = stageIndex,
-		stageName = Route.stage(stageIndex).Name,
+		stageName = Route.arrivalName(distance, sim.escaped),
 		previousBest = previousBest,
 		newServerBest = newServerBest,
 		expectedKm = round.expectedKm,
@@ -785,12 +781,13 @@ local function runResults(round: any)
 			if tickets > 0 then
 				player:SetAttribute("Tickets", getNumber(player, "Tickets") + tickets)
 			end
+			local rank, people = Scoring.rank(member.id, contributions, entries)
 			me = {
 				coins = coins,
 				tickets = tickets,
 				contributionKm = contributions[member.id] or 0,
-				rank = Scoring.rank(member.id, contributions),
-				crew = #entries,
+				rank = rank, -- 사람끼리의 순위 (영웅 시상과 같은 기준)
+				crew = people,
 				successes = member.successes,
 				attempts = member.attempts,
 				bestStreak = member.bestStreak,
@@ -832,7 +829,7 @@ local function cleanup()
 	current = nil
 	Bots.clear()
 	World.clearSeats()
-	state:SetAttribute("BuildJson", "")
+	showBuild(nil, "")
 	state:SetAttribute("CrewCount", 0)
 	state:SetAttribute("CaptainUserId", 0)
 	state:SetAttribute("CaptainName", "")
@@ -863,6 +860,10 @@ local function onPlayerAdded(player: Player)
 	player:SetAttribute("Seat", 0)
 	player:SetAttribute("Captain", false)
 	player:SetAttribute("SpawnIndex", #Players:GetPlayers())
+	-- 시프트 락을 켜면 마우스가 화면 가운데에 묶여 탑승 버튼을 누를 수 없으므로 끔 (이 값은 서버에서만 바꿀 수 있음)
+	pcall(function()
+		player.DevEnableMouseLock = false
+	end)
 	if state:GetAttribute("Phase") == "Join" then
 		player:SetAttribute("Role", "Lobby")
 	else
@@ -982,7 +983,7 @@ function Round.start()
 	state:SetAttribute("ExpectedKm", 0)
 	state:SetAttribute("BestKm", 0)
 	state:SetAttribute("LaunchAt", 0)
-	state:SetAttribute("BuildJson", "")
+	showBuild(nil, "")
 	resetFlightState()
 	showOptions()
 	state.Parent = ReplicatedStorage

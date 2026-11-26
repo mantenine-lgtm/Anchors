@@ -85,16 +85,20 @@ function Scoring.missionKing(entries: { Entry }, pick: (number) -> number): stri
 	end, 1, pick)
 end
 
--- 기여 거리 순위 (1위부터, 봇 포함 전체 승무원 기준)
-function Scoring.rank(id: string, contributions: { [string]: number }): number
+-- 기여 거리 순위(1위부터)와 견준 사람 수. 시상과 같은 기준으로 사람끼리만 견줍니다 (봇 제외).
+function Scoring.rank(id: string, contributions: { [string]: number }, entries: { Entry }): (number, number)
 	local mine = contributions[id] or 0
 	local rank = 1
-	for otherId, km in pairs(contributions) do
-		if otherId ~= id and km > mine + 1e-9 then
-			rank += 1
+	local people = 0
+	for _, entry in ipairs(entries) do
+		if not entry.isBot then
+			people += 1
+			if entry.id ~= id and (contributions[entry.id] or 0) > mine + 1e-9 then
+				rank += 1
+			end
 		end
 	end
-	return rank
+	return rank, people
 end
 
 -- 코인: 거리만큼. 자리 비움이면 절반.

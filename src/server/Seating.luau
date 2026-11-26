@@ -4,6 +4,7 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
 
 local Config = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"))
 local World = require(script.Parent.World)
@@ -13,6 +14,17 @@ local Seating = {}
 local R15_SIT = "rbxassetid://2506281703"
 local R6_SIT = "rbxassetid://178130996"
 local GOLD = Color3.fromRGB(255, 205, 60)
+local GUARD_INTERVAL = 0.5 -- 자리에 고정한 캐릭터가 제자리에 있는지 다시 보는 간격(초)
+local GHOST_REFRESH = 6 -- 유령의 투명 처리를 되풀이하는 횟수 (늦게 붙는 장신구 대비, 약 3초 동안)
+
+-- 플레이어마다 지금 잡아 둔 캐릭터와 자리 ("Crew:8", "Ghost:1"). 같은 캐릭터를 같은 자리에 두 번 꾸미지 않으려고
+-- 기억합니다. 판이 끝날 때(releaseAll) 모두 지웁니다.
+local placed: { [Player]: { character: Model, key: string } } = {}
+
+local function isPlaced(player: Player, character: Model, key: string): boolean
+	local entry = placed[player]
+	return entry ~= nil and entry.character == character and entry.key == key
+end
 
 -- 캐릭터가 다 만들어질 때까지 잠깐 기다렸다가 중심 파트와 Humanoid 를 돌려줌
 local function getParts(character: Model): (BasePart?, Humanoid?)
@@ -99,11 +111,52 @@ local function makeGhostly(character: Model)
 	end
 end
 
+-- 엔진이 새 캐릭터를 다 만들어 리스폰 지점에 놓을 때까지 기다림.
+-- CharacterAdded 는 캐릭터 불러오기의 "시작"에 불립니다. 엔진은 아바타를 다 불러온 뒤에야 캐릭터를
+-- Workspace 에 넣고 리스폰 지점으로 옮기므로, 그 전에 자리를 잡으면 엔진이 발사장으로 다시 옮겨 버립니다.
+local function waitUntilSpawned(player: Player, character: Model): boolean
+	-- 아바타를 불러오는 데 걸리는 시간에는 정해진 한도가 없으므로, 캐릭터가 바뀌거나 플레이어가 나갈 때까지 기다림
+	while not character:IsDescendantOf(Workspace) do
+		if player.Character ~= character or player.Parent ~= Players then
+			return false
+		end
+		task.wait()
+	end
+	task.wait(0.2) -- Workspace 에 들어온 직후에 엔진이 리스폰 지점으로 옮기므로 그 뒤에 움직임
+	return player.Character == character and character:IsDescendantOf(Workspace)
+end
+
+-- 자리에 고정한 캐릭터를 그 자리가 풀릴 때(판이 끝나거나 캐릭터가 바뀔 때)까지 지켜봄.
+-- 엔진이 새 캐릭터를 리스폰 지점으로 옮기는 때는 문서에 순서만 있고 시간은 없어서, 자리를 잡은 뒤에
+-- 뒤늦게 발사장으로 옮겨질 수 있습니다. 그때나 다른 이유로 자리를 벗어나면 다시 제자리에 둡니다.
+local function guard(player: Player, character: Model, key: string, cframe: CFrame, ghost: boolean)
+	task.spawn(function()
+		local checks = 0
+		while true do
+			task.wait(GUARD_INTERVAL)
+			if player.Parent ~= Players or player.Character ~= character or not isPlaced(player, character, key) then
+				return
+			end
+			local rootPart = character:FindFirstChild("HumanoidRootPart")
+			local humanoid = character:FindFirstChildOfClass("Humanoid")
+			if rootPart and rootPart:IsA("BasePart") and humanoid then
+				if not rootPart.Anchored or (rootPart.Position - cframe.Position).Magnitude > 2 then
+					hold(character, cframe)
+				end
+			end
+			checks += 1
+			if ghost and checks <= GHOST_REFRESH then
+				makeGhostly(character) -- 늦게 붙은 장신구도 투명하게
+			end
+		end
+	end)
+end
+
 -- 플레이어의 역할(속성 Role)에 맞게 지금 캐릭터를 배치. 캐릭터가 새로 생길 때마다 불립니다.
 function Seating.apply(player: Player)
 	local character = player.Character
-	if not character then
-		return
+	if not character or not character:IsDescendantOf(Workspace) then
+		return -- 아직 만들어지는 중이면, 다 만들어진 뒤 onCharacterAdded 가 다시 부름
 	end
 	local role = player:GetAttribute("Role")
 	if role == "Crew" then
@@ -111,21 +164,30 @@ function Seating.apply(player: Player)
 		if typeof(seatIndex) ~= "number" or seatIndex < 1 or seatIndex > World.seatCount() then
 			return
 		end
-		local seatCFrame = World.seatCFrame(seatIndex)
-		local humanoid = hold(character, seatCFrame * CFrame.new(0, Config.World.SeatRootOffset, 0.2))
-		if humanoid then
+		local key = "Crew:" .. tostring(seatIndex)
+		local target = World.seatCFrame(seatIndex) * CFrame.new(0, Config.World.SeatRootOffset, 0.2)
+		local humanoid = hold(character, target)
+		if humanoid and not isPlaced(player, character, key) then
+			placed[player] = { character = character, key = key }
 			playSit(character, humanoid)
 			if player:GetAttribute("Captain") == true then
 				addCrown(character)
 			end
+			guard(player, character, key, target, false)
 		end
 	elseif role == "Ghost" then
 		local ghostIndex = player:GetAttribute("GhostIndex")
 		if typeof(ghostIndex) ~= "number" then
 			ghostIndex = 1
 		end
-		if hold(character, World.ghostCFrame(ghostIndex)) then
+		local key = "Ghost:" .. tostring(ghostIndex)
+		local target = World.ghostCFrame(ghostIndex)
+		if hold(character, target) then
 			makeGhostly(character)
+			if not isPlaced(player, character, key) then
+				placed[player] = { character = character, key = key }
+				guard(player, character, key, target, true)
+			end
 		end
 	end
 end
@@ -147,33 +209,39 @@ end
 
 -- 판이 끝나면 모두 발사장으로 돌려보냄 (캐릭터를 새로 만들어 고정·투명 상태를 한 번에 지움)
 function Seating.releaseAll()
+	table.clear(placed)
 	for index, player in ipairs(Players:GetPlayers()) do
 		player:SetAttribute("Role", "Lobby")
 		player:SetAttribute("Seat", 0)
 		player:SetAttribute("Captain", false)
 		player:SetAttribute("SpawnIndex", index)
-		task.spawn(function()
-			-- 새 이름(LoadCharacterAsync)을 먼저 쓰고, 없는 버전이면 예전 이름으로
-			local ok = pcall(function()
-				(player :: any):LoadCharacterAsync()
-			end)
-			if not ok and player.Parent == Players then
-				pcall(function()
-					(player :: any):LoadCharacter()
+		-- 아직 불러오는 중인 캐릭터(방금 들어온 사람, 리스폰 중인 사람)는 고정도 투명 처리도 없으니 그대로 둡니다.
+		-- 불러오기가 끝나기 전에 또 부르지 말라는 것이 공식 문서의 안내이고, 다 만들어지면 onCharacterAdded 가
+		-- 방금 바꾼 역할(Lobby)대로 발사장에 둡니다.
+		local character = player.Character
+		if character and character:IsDescendantOf(Workspace) then
+			task.spawn(function()
+				-- 새 이름(LoadCharacterAsync)을 먼저 쓰고, 없는 버전이면 예전 이름으로
+				local ok = pcall(function()
+					(player :: any):LoadCharacterAsync()
 				end)
-			end
-		end)
+				if not ok and player.Parent == Players then
+					pcall(function()
+						(player :: any):LoadCharacter()
+					end)
+				end
+			end)
+		end
 	end
 end
 
 -- 캐릭터가 생길 때: 판 중이면 좌석/유령 자리로, 아니면 발사장 리스폰 자리로
 function Seating.onCharacterAdded(player: Player, character: Model)
-	local rootPart = getParts(character)
-	if not rootPart then
+	if not waitUntilSpawned(player, character) then
 		return
 	end
-	task.wait(0.2) -- 기본 리스폰 배치가 끝난 뒤에 옮김
-	if player.Character ~= character then
+	local rootPart = getParts(character)
+	if not rootPart or player.Character ~= character then
 		return
 	end
 	local role = player:GetAttribute("Role")

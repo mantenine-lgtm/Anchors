@@ -76,6 +76,7 @@ function Bots.place(index: number, seatIndex: number)
 	tag.Size = UDim2.fromScale(5, 1.5)
 	tag.StudsOffset = Vector3.new(0, 1.6, 0)
 	tag.MaxDistance = 90
+	tag.AlwaysOnTop = true -- 윗줄 좌석 받침대에 가려지지 않게 (바깥 시점에서는 MaxDistance 때문에 안 보임)
 	tag.Adornee = head
 	local label = Instance.new("TextLabel")
 	label.Size = UDim2.fromScale(1, 1)

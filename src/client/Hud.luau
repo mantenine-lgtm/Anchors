@@ -84,6 +84,25 @@ local endUntil = 0
 -- 화면 번쩍임
 local flashFrame: Frame
 
+-- 한 줄 안내·위기 경고·아이템 알림을 두는 높이 (화면 높이에 대한 비율). 선실 전광판 바로 아래.
+-- 틈은 화면 높이의 2%: 휴대폰은 3D 화면이 전체 화면에 그려지고 이 글자는 안전 영역 안에만 그려져서
+-- 두 높이가 조금 다르므로(아래쪽 여백만큼), 그 차이를 덮을 만큼 둡니다.
+local UNDER_BOARD_GAP = 0.02
+local UNDER_BOARD_MAX = 0.41 -- 이보다 내려가면 아이템 알림(+72, 높이 42)이 그 아래 '감사 N'(아래에서 270)과 겹침
+local underBoard = State.BoardBottomDefault + UNDER_BOARD_GAP
+
+-- 전광판이 화면에 보이는 자리가 바뀌면(승무원 수에 따라 카메라가 달라짐) 그 아래 글자도 따라 옮김
+local function placeUnderBoard()
+	local top = math.min(State.boardBottom + UNDER_BOARD_GAP, UNDER_BOARD_MAX)
+	if math.abs(top - underBoard) < 0.0005 then
+		return
+	end
+	underBoard = top
+	toastLabel.Position = UDim2.new(0.5, 0, top, 0)
+	crisisLabel.Position = UDim2.new(0.5, 0, top, 34)
+	itemBanner.Position = UDim2.new(0.5, 0, top, 72)
+end
+
 local function toast(text: string, seconds: number?)
 	toastLabel.Text = text
 	toastLabel.Visible = true
@@ -99,7 +118,9 @@ end
 
 -- ------------------------------------------------------------ 만들기
 local function buildBanner()
-	-- 위쪽 가운데는 위에서부터: 안내 두 줄(0~76) → 선실 전광판이 보이는 자리(약 80~225) → 한 줄 안내 → 위기 경고 → 아이템 알림
+	-- 위쪽 가운데는 위에서부터: 안내 두 줄(0~76) → 선실 전광판이 보이는 자리(화면 높이의 약 14~31%) → 한 줄 안내 → 위기 경고 → 아이템 알림
+	-- 전광판은 창 모양이 바뀌어도 화면 높이의 같은 비율에 보이므로, 그 아래 글자는 높이 비율로 자리를 잡습니다.
+	-- 비율은 매 프레임 placeUnderBoard 가 State.boardBottom(전광판 아래 끝)에 맞춥니다.
 	local banner = Ui.frame(root, "Banner", {
 		AnchorPoint = Vector2.new(0.5, 0),
 		Position = UDim2.new(0.5, 0, 0, 4),
@@ -117,7 +138,7 @@ local function buildBanner()
 	})
 	toastLabel = Ui.label(root, "Toast", "", 23, {
 		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.new(0.5, 0, 0, 230),
+		Position = UDim2.new(0.5, 0, underBoard, 0),
 		Size = UDim2.fromOffset(760, 32),
 		TextColor3 = C.Yellow,
 		TextStrokeTransparency = 0.3,
@@ -126,7 +147,7 @@ local function buildBanner()
 	})
 	crisisLabel = Ui.label(root, "CrisisLabel", "", 30, {
 		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.new(0.5, 0, 0, 264),
+		Position = UDim2.new(0.5, 0, underBoard, 34),
 		Size = UDim2.fromOffset(640, 36),
 		TextColor3 = C.Red,
 		TextStrokeTransparency = 0.2,
@@ -148,6 +169,7 @@ local function buildJoin()
 		AnchorPoint = Vector2.new(0.5, 1),
 		Position = UDim2.new(0.5, 0, 1, -44),
 		Size = UDim2.fromOffset(320, 92),
+		Modal = true, -- 이 버튼이 보이는 동안에는 1인칭·시프트 락이어도 마우스가 풀려서 누를 수 있음
 		Visible = false,
 	})
 	Ui.stroke(joinButton, C.White, 3, 0.4)
@@ -220,9 +242,12 @@ local function buildFlightPanels()
 	ghostNote = Ui.label(root, "GhostNote", "이번 비행은 관전 중입니다. 다음 판에 탑승하세요.", 22, {
 		AnchorPoint = Vector2.new(0, 1),
 		Position = UDim2.new(0, 24, 1, -24),
-		Size = UDim2.fromOffset(560, 34),
+		-- 가운데 아래의 미션 판(왼쪽 끝 340)에 가리지 않게 좁게 두 줄로
+		Size = UDim2.fromOffset(300, 60),
 		TextColor3 = C.Dim,
 		TextXAlignment = Enum.TextXAlignment.Left,
+		TextYAlignment = Enum.TextYAlignment.Bottom,
+		TextWrapped = true,
 		TextStrokeTransparency = 0.4,
 		Visible = false,
 	})
@@ -275,7 +300,7 @@ end
 local function buildItem()
 	itemBanner = Ui.label(root, "ItemBanner", "", 30, {
 		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.new(0.5, 0, 0, 302),
+		Position = UDim2.new(0.5, 0, underBoard, 72),
 		Size = UDim2.fromOffset(820, 42),
 		TextColor3 = C.Yellow,
 		TextStrokeTransparency = 0.2,
@@ -408,12 +433,17 @@ local function resultRow(parent: Instance, y: number, title: string, text: strin
 		TextColor3 = C.Dim,
 		TextXAlignment = Enum.TextXAlignment.Left,
 	})
-	Ui.label(parent, "RowText", text, size, {
-		Position = UDim2.fromOffset(160, y),
-		Size = UDim2.new(1, -194, 0, size + 8),
+	-- 이름이 길면 판 밖으로 나가는 대신 글자가 틀에 맞게 작아짐 (가장 클 때가 size, 뒤쪽 숫자가 잘리지 않음).
+	-- 틀 높이가 빠듯하면 짧은 글자도 작아지므로 위아래로 2씩 넉넉하게 둠.
+	local label = Ui.label(parent, "RowText", text, size, {
+		Position = UDim2.fromOffset(160, y - 2),
+		Size = UDim2.new(1, -194, 0, size + 12),
 		TextColor3 = color,
 		TextXAlignment = Enum.TextXAlignment.Left,
+		TextScaled = true,
+		TextTruncate = Enum.TextTruncate.AtEnd, -- 가장 작게 해도 넘치면 끝을 줄임
 	})
+	Ui.make("UITextSizeConstraint", { MinTextSize = 12, MaxTextSize = size, Parent = label })
 end
 
 local LAUNCH_TEXT = {
@@ -484,7 +514,7 @@ local function fillResults(data: any)
 	if me then
 		local badges = {}
 		if me.isHero then
-			table.insert(badges, "이번 판의 영웅")
+			table.insert(badges, "이번 비행의 영웅")
 		end
 		if me.isKing then
 			table.insert(badges, "미션왕")
@@ -509,7 +539,13 @@ local function fillResults(data: any)
 		end
 		resultRow(resultsPanel, y, "보상", reward, C.Green, 24)
 		y += 36
-		resultRow(resultsPanel, y, "내 기여", string.format("%s · %d명 중 %d위 · 미션 %d/%d", Fmt.km(me.contributionKm), me.crew, me.rank, me.successes, me.attempts), C.Text, 22)
+		-- 순위는 사람끼리만 견줌 (봇은 시상에서 빠지므로). 혼자면 순위를 적지 않음
+		local mine = Fmt.km(me.contributionKm)
+		if me.crew >= 2 then
+			mine ..= string.format(" · 사람 %d명 중 %d위", me.crew, me.rank)
+		end
+		mine ..= string.format(" · 미션 %d/%d", me.successes, me.attempts)
+		resultRow(resultsPanel, y, "내 기여", mine, C.Text, 22)
 		y += 34
 		if me.newBest then
 			resultRow(resultsPanel, y, "내 기록", "개인 최고 기록 갱신!", C.Yellow, 22)
@@ -655,8 +691,7 @@ local function updateBanner(phase: string)
 	elseif phase == "Build" then
 		bannerTitle.Text = "로켓 조립 중 " .. Fmt.clock(State.phaseLeft())
 		bannerTitle.TextColor3 = C.Text
-		local info = State.build()
-		local gear = if info then info.gear else ""
+		local gear = State.gearName()
 		local captain = State.text("CaptainName")
 		if State.isCaptain() then
 			bannerSub.Text = "당신이 선장입니다! 카운트다운이 0이 될 때 발사 버튼을 누르세요"
@@ -814,6 +849,8 @@ function Hud.update(_dt: number)
 
 	walletLabel.Text = string.format("티켓 %d  ·  코인 %s", State.myNumber("Tickets"), Fmt.comma(State.myNumber("Coins")))
 
+	placeUnderBoard()
+
 	-- 탑승 버튼
 	local showJoin = phase == "Join"
 	joinButton.Visible = showJoin
@@ -908,13 +945,13 @@ function Hud.init()
 
 	launchButton.MouseButton1Down:Connect(pressLaunch)
 	-- 스페이스는 기본 조작(점프)에 묶여 있으면 "이미 처리된 입력"으로 오기도 해서, 그 표시는 보지 않고
-	-- 채팅 등 글자를 치는 중인지만 확인합니다.
+	-- 채팅 등 글자를 치는 중인지만 확인합니다. (엔터는 채팅을 보내는 키라서 발사 키로 쓰지 않음)
 	UserInputService.InputBegan:Connect(function(input: InputObject)
-		if UserInputService:GetFocusedTextBox() ~= nil then
+		if State.typing() then
 			return
 		end
 		local key = input.KeyCode
-		if key == Enum.KeyCode.Space or key == Enum.KeyCode.Return or key == Enum.KeyCode.ButtonA then
+		if key == Enum.KeyCode.Space or key == Enum.KeyCode.ButtonA then
 			pressLaunch()
 		end
 	end)

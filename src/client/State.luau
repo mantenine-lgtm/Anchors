@@ -1,9 +1,10 @@
 -- 서버가 알려 주는 판 상태(ReplicatedStorage.RoundState 의 속성)를 읽기 쉽게 감싼 것.
 -- 화면 모듈끼리 주고받는 간단한 알림(on / emit)도 여기 있습니다.
 
-local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TextChatService = game:GetService("TextChatService")
+local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
@@ -106,41 +107,35 @@ function State.aboard(): boolean
 	return phase == "Build" or phase == "Countdown" or phase == "Flight" or phase == "Results"
 end
 
--- ------------------------------------------------------------ 승무원 명단 (빌드 때 서버가 JSON 으로 보냄)
-export type CrewInfo = { name: string, seat: number, bot: boolean, captain: boolean, userId: number }
-export type BuildInfo = { crew: { CrewInfo }, totals: { [string]: number }, gear: string }
-
-local buildJson = ""
-local buildInfo: BuildInfo? = nil
-
-function State.build(): BuildInfo?
-	local json = State.text("BuildJson")
-	if json ~= buildJson then
-		buildJson = json
-		buildInfo = nil
-		if json ~= "" then
-			local ok, decoded = pcall(function()
-				return HttpService:JSONDecode(json)
-			end)
-			if ok and type(decoded) == "table" and type(decoded.crew) == "table" and type(decoded.totals) == "table" then
-				buildInfo = decoded
-			end
-		end
-	end
-	return buildInfo
+-- ------------------------------------------------------------ 빌드 정보 (서버가 짧은 속성으로 보냄)
+-- 종류별 파워 합계 (typeId: Config.Parts.Types 의 Id)
+function State.buildTotal(typeId: string): number
+	return State.number("Total_" .. typeId)
 end
 
-function State.crewBySeat(seat: number): CrewInfo?
-	local info = State.build()
-	if info then
-		for _, member in ipairs(info.crew) do
-			if member.seat == seat then
-				return member
-			end
-		end
-	end
-	return nil
+-- 이번 판 장비 묶음 이름
+function State.gearName(): string
+	return State.text("GearName")
 end
+
+-- ------------------------------------------------------------ 입력
+-- 글자를 치는 중인지. 기본 채팅 입력창은 GetFocusedTextBox 로는 보이지 않아서 따로 확인합니다.
+function State.typing(): boolean
+	if UserInputService:GetFocusedTextBox() ~= nil then
+		return true
+	end
+	local ok, focused = pcall(function()
+		local bar = TextChatService:FindFirstChildOfClass("ChatInputBarConfiguration")
+		return bar ~= nil and bar.IsFocused
+	end)
+	return ok and focused == true
+end
+
+-- ------------------------------------------------------------ 화면 배치 (서버 값이 아니라 클라이언트가 계산)
+-- 선실 시점에서 전광판 아래 끝이 화면 높이의 어디에 오는지 (0 = 맨 위, 1 = 맨 아래).
+-- CameraRig 가 계산해 넣고, Hud 가 한 줄 안내를 그 바로 아래에 두는 데 씁니다.
+State.BoardBottomDefault = 0.313 -- 승무원 10명(기본) 배치일 때의 값
+State.boardBottom = State.BoardBottomDefault
 
 -- ------------------------------------------------------------ 부드러운 비행 값
 -- 서버는 0.1초마다 값을 보내므로, 화면에는 그 사이를 이어서 보여 줍니다.

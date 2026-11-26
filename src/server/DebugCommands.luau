@@ -38,7 +38,11 @@ local function handle(player: Player, command: any, value: any)
 		local tickets = player:GetAttribute("Tickets")
 		player:SetAttribute("Tickets", (if typeof(tickets) == "number" then tickets else 0) + 1)
 		reply(player, "티켓 +1")
-	elseif command == "BotFill" and typeof(value) == "number" then
+	elseif command == "Coins" then
+		local coins = player:GetAttribute("Coins")
+		player:SetAttribute("Coins", (if typeof(coins) == "number" then coins else 0) + Config.Debug.CoinGrant)
+		reply(player, string.format("코인 +%d", Config.Debug.CoinGrant))
+	elseif command == "BotFill" and typeof(value) == "number" and value == value then
 		Round.setBotFill(value)
 		reply(player, string.format("다음 판부터 승무원을 %d명까지 봇으로 채웁니다", math.clamp(math.floor(value), 1, 50)))
 	elseif command == "BotSkill" and typeof(value) == "string" then

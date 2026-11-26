@@ -244,7 +244,9 @@ function World.rocket(): Model
 end
 
 -- 좌석 배치: 외창 맞은편 벽에 층층이.
--- 가운데 자리부터 센 좌석 번호 목록을 돌려줌 (첫 번째 = 맨 윗줄 가운데 = 선장 자리).
+-- 좌석 번호 목록을 돌려줌: 맨 윗줄 가운데(선장 자리)부터, 윗줄을 먼저 채우고 아랫줄로.
+-- 사람이 이 순서대로 먼저 앉으므로, 화면 아래쪽 미션 판에 가려지는 아랫줄에는 봇부터 앉게 됩니다.
+-- (사람이 윗줄 좌석 수보다 많으면 나머지 사람은 아랫줄에 앉습니다. 기본 10명 배치는 윗줄 5자리.)
 function World.buildSeats(count: number): { number }
 	World.clearSeats()
 	local folder = Instance.new("Folder")
@@ -263,14 +265,16 @@ function World.buildSeats(count: number): { number }
 		local col = (i - 1) % perRow
 		local inRow = if row < rows - 1 then perRow else topRowCount
 		local theta = math.pi + (col - (inRow - 1) / 2) * stepRad
-		local position = Vector3.new(math.sin(theta) * W.SeatRadius, W.SeatFirstRowY + row * W.SeatRowHeight, math.cos(theta) * W.SeatRadius)
+		-- 한 줄뿐이면 둘째 줄 높이에 둠 (첫 줄 높이는 선실 시점에서 미션 판 뒤에 가려짐)
+		local level = if rows == 1 then 1 else row
+		local position = Vector3.new(math.sin(theta) * W.SeatRadius, W.SeatFirstRowY + level * W.SeatRowHeight, math.cos(theta) * W.SeatRadius)
 		local inward = Vector3.new(-math.sin(theta), 0, -math.cos(theta))
 		local base = CFrame.lookAt(position, position + inward)
 		local seatCFrame = base * CFrame.Angles(math.rad(W.SeatReclineDeg), 0, 0)
 		seatCFrames[i] = seatCFrame
-		centrality[i] = math.abs(col - (inRow - 1) / 2) * 10 - row
+		centrality[i] = (rows - 1 - row) * 1000 + math.abs(col - (inRow - 1) / 2) * 10
 		if i == captainSeat then
-			centrality[i] = -1000
+			centrality[i] = -1
 		end
 
 		local seat = Instance.new("Model")

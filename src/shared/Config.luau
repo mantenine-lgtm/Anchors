@@ -1,6 +1,9 @@
 --!strict
 -- ROFLY 데모 1의 모든 수치. 밸런스는 이 파일만 고치면 됩니다.
--- 비행 수치는 기획서 '수치 밸런스' 탭 1차 안(시뮬레이터 v7)과 같습니다.
+-- 비행 수치는 기획서 '수치 밸런스' 탭 1차 안(시뮬레이터 v8)과 같습니다.
+-- 단, 데모 1에는 부품 그리드와 인접 시너지가 없어서 탭의 표(시너지 포함)보다 조금 짧게 납니다
+-- (기본인 일반 Lv1 10명은 약 1%, 전설 Lv10 50명은 약 12%. 그래서 최대 구성도 80만 km 탈출에는 조금 못 미칩니다).
+-- 맞춰 볼 값은 시너지 없는 확인값입니다: 일반 Lv1 10개 = 종류별 합계 32.2187, 전원 성공 + 완벽한 발사 26.9741 km, 82.05초.
 -- "임시"라고 적힌 값은 기획서에 수치가 없어서 데모 1을 만들며 새로 잡은 값입니다.
 
 local Config = {}
@@ -10,7 +13,7 @@ Config.Version = "demo1"
 -- 페이즈 길이(초)
 Config.Phase = {
 	Join = 30, -- 참여 확인 ("붕괴까지" 타이머)
-	JoinAllReady = 5, -- 서버의 모든 사람이 탑승을 누르면 이만큼만 더 기다림
+	JoinAllReady = 5, -- 임시: 서버의 모든 사람이 탑승을 누르면 이만큼만 더 기다림 (혼자 테스트할 때 30초를 다 기다리지 않게)
 	Build = 10, -- 임시: 본문은 45초. 데모 1은 기본 부품 자동 장착이라 줄임
 	Countdown = 10,
 	Results = 20,
@@ -20,8 +23,8 @@ Config.Phase = {
 -- 비행 계산 (FlightSim.luau 가 사용)
 Config.Flight = {
 	Dt = 0.05, -- 계산 한 칸(초)
-	RefPower = 10, -- 파워 자릿수 기준 (신규 부품 1개)
-	BaseSpeed = 0.00532, -- 기준 발사 속도 (km/s)
+	RefPower = 1, -- 파워 자릿수 기준: 자릿수 = log10(1 + 합계 / RefPower)
+	BaseSpeed = 0.00575, -- 기준 발사 속도 (km/s)
 	EngineExp = 0.2, -- 엔진 자릿수 1당 발사 속도 10^0.2배
 	HotRate = 0.10, -- 최대 출력 구간: 초당 속도 증가율
 	CruiseRate = 0.05, -- 순항 구간
@@ -112,7 +115,9 @@ Config.Bots = {
 		{ Id = "perfect", Name = "전원 성공", Rates = { 1, 1, 1, 1 } },
 		{ Id = "fail", Name = "전부 실패", Rates = { 0, 0, 0, 0 } },
 	},
-	ThanksChance = 0.7, -- 봇이 감사 하트를 보낼 확률 (지표에는 세지 않음)
+	-- 임시: 봇이 감사 하트를 보낼 확률. 혼자 테스트할 때 호응을 보여 주는 연출이며,
+	-- 화면의 "감사 N" 에는 들어가고 Output 지표에는 세지 않음. 사람끼리 테스트할 때는 0 으로.
+	ThanksChance = 0.7,
 }
 
 -- 부품
@@ -129,6 +134,7 @@ Config.Parts = {
 	RarityPower = { 10, 100, 1000, 10000 },
 	LevelMultiplier = { 1.0, 1.3, 1.7, 2.2, 2.8, 3.6, 4.6, 6.0, 7.7, 10.0 },
 	SlotBonus = 0.01, -- 꽂은 부품 1개당 그 종류 합계 +1%
+	RankExp = 1, -- 종류별 합계에서 센 순서 k번째 부품은 1 / k^RankExp 만 더함 (인원 효과를 완만하게)
 }
 
 -- 장비 묶음 (데모 1은 전원 같은 장비. 디버그 패널에서 바꿈)
@@ -153,6 +159,7 @@ Config.Rewards = {
 
 -- 루트: 챕터와 스테이지 끝 지점(km). 이름은 데모 스테이지 5개만 확정.
 Config.Route = {
+	EscapeName = "폭발권 밖", -- 루트 끝(80만 km)에 닿아 탈출했을 때의 도착 지점 이름 (16번째)
 	Chapters = {
 		{ Name = "대기권", EndKm = 100 },
 		{ Name = "지구 궤도", EndKm = 36000 },
@@ -205,6 +212,7 @@ Config.World = {
 	SeatReclineDeg = 40, -- 의자가 뒤로 젖혀진 각도
 	SeatRootOffset = 1.9, -- 의자 판에서 캐릭터 중심까지 높이
 	SpawnDistance = 95, -- 로켓 중심에서 리스폰 지점까지
+	OutsideCamera = { 130, 90, 205 }, -- 바깥 시점 카메라 자리 (x, y, z)
 	StudsPerMeter = 3.57,
 }
 
@@ -227,6 +235,7 @@ Config.Sounds = {
 Config.Debug = {
 	AllowInStudio = true,
 	AllowCreator = true,
+	CoinGrant = 1000, -- 디버그 패널의 "코인 +" 버튼 한 번에 주는 코인
 }
 
 return Config
