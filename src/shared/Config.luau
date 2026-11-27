@@ -288,13 +288,15 @@ Config.Sounds = {
 -- 엔진음: 비행 내내 반복해서 깔리는 소리 세 겹. 계산은 EngineMix.luau, 소리 내기는 클라이언트 Sfx.luau.
 -- 굉음은 비행 구간(최대 출력·구원 연료 > 순항 > 솔라 세일 > 관성)의 추력만큼 커지고, 웅웅 소리는 추력이 없어도
 -- 조금은 늘 남아서 비행 중에는 엔진 소리가 끊기지 않습니다. 바람 소리는 대기권 안에서 빠를수록 커집니다.
--- 엔진 소리 두 개는 크리에이터 스토어의 Pro Sound Effects 효과음(Roblox 가 라이선스한 무료 소리, 어느 게임에서나 씀)입니다.
+-- 엔진 소리는 지금 크리에이터 스토어의 Pro Sound Effects 효과음(Roblox 가 라이선스한 무료 소리, 어느 게임에서나 씀)을
+-- 임시로 씁니다. ElevenLabs 로 만든 엔진 소리(tools/sfx)를 Roblox 에 올리면 그 에셋 ID 로 바꿉니다.
 -- 크기(Volume)는 소리를 들어 보지 않고 잡은 임시 값입니다. 크거나 작으면 이 표의 Volume 만 고치면 됩니다.
 Config.EngineSound = {
-	-- Spaceship Interior Rocket Engine Constant 2: 우주선 안에서 듣는 로켓 엔진, 먹먹한 천둥 같은 굉음과 탁탁 튀는 소리 (63초)
+	-- 엔진 소리 하나를 굉음·웅웅 두 겹이 같이 씀 (용량을 줄이려고). 웅웅 소리는 Pitch 배로 낮게,
+	-- 소리 길이의 Offset 비율만큼 어긋난 자리부터 틀어서 굉음과 다른 겹으로 들림
+	-- (임시: Spaceship Interior Rocket Engine Constant 2, 우주선 안에서 듣는 로켓 엔진 63초)
 	Roar = { Id = "rbxassetid://9119413402", Volume = 0.6 },
-	-- 같은 묶음의 먹먹한 굉음 (66초)
-	Hum = { Id = "rbxassetid://9119413760", Volume = 0.4 },
+	Hum = { Id = "rbxassetid://9119413402", Volume = 0.4, Pitch = 0.75, Offset = 0.5 },
 	-- 기본 내장 낙하 바람 소리 (설치본에 있음)
 	Wind = { Id = "rbxasset://sounds/action_falling.ogg", Volume = 0.35 },
 	-- 엔진 소리 에셋을 못 불러오면 대신 쓰는 기본 내장 소리. FallbackPitch 배로 낮춰 굉음처럼 들리게 함

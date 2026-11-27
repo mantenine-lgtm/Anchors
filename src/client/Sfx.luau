@@ -1,5 +1,6 @@
 -- 소리. 짧은 효과음(Config.Sounds)과 비행 내내 깔리는 엔진음(Config.EngineSound).
 -- 엔진음은 반복 소리 세 겹입니다: 굉음(추력만큼), 웅웅 소리(비행 중에는 늘 조금은 남음), 바람(대기권 안에서 빠를수록).
+-- 굉음과 웅웅 소리는 같은 엔진 소리 하나를 씁니다 (용량을 줄이려고). 웅웅 소리는 낮게 틀고 시작 위치를 어긋나게 해서 다른 겹으로 들립니다.
 -- 크기와 높이는 EngineMix 가 비행 구간·터보 엔진·속도로 계산하고, 여기서 매 프레임 부드럽게 따라갑니다.
 
 local ContentProvider = game:GetService("ContentProvider")
@@ -25,6 +26,8 @@ local nextAlarm = 0
 type Loop = {
 	sound: Sound,
 	baseVolume: number, -- Config 의 크기
+	basePitch: number, -- Config 의 높이 배율 (Pitch, 없으면 1)
+	offset: number, -- 켤 때 시작 위치, 소리 길이에 대한 비율 (Offset, 없으면 0)
 	pitchScale: number, -- 대신 쓰는 소리(Fallback)로 바뀌면 낮춤
 	volume: number, -- 지금 크기 (목표를 부드럽게 따라감)
 	pitch: number,
@@ -54,7 +57,16 @@ local function makeLoop(folder: Instance, name: string, info: any)
 	sound.Looped = true
 	sound.Volume = 0
 	sound.Parent = folder
-	loops[name] = { sound = sound, baseVolume = info.Volume, pitchScale = 1, volume = 0, pitch = 1, on = false }
+	loops[name] = {
+		sound = sound,
+		baseVolume = info.Volume,
+		basePitch = info.Pitch or 1,
+		offset = info.Offset or 0,
+		pitchScale = 1,
+		volume = 0,
+		pitch = 1,
+		on = false,
+	}
 end
 
 -- 소리 파일을 미리 받아 둠 (에셋 ID 소리는 처음 틀 때 받느라 늦게 나거나 안 날 수 있음).
@@ -161,9 +173,12 @@ local function drive(loop: Loop, level: number, pitch: number, dt: number)
 		loop.pitch = pitch -- 조용하다가 새로 켜질 때는 높이를 바로 맞춤
 	end
 	sound.Volume = loop.volume
-	sound.PlaybackSpeed = math.max(loop.pitch * loop.pitchScale, 0.05)
+	sound.PlaybackSpeed = math.max(loop.pitch * loop.basePitch * loop.pitchScale, 0.05)
 	if not loop.on then
 		loop.on = true
+		if loop.offset > 0 and sound.TimeLength > 0 then
+			sound.TimePosition = loop.offset * sound.TimeLength -- 같은 소리를 쓰는 다른 겹과 어긋나게
+		end
 		sound:Play()
 	end
 end

@@ -7,9 +7,9 @@
   "variants": 3,
   "influence": [0.35, 0.55, 0.75],
   "sounds": [
-    {"name": "Engine", "config": "Config.EngineSound.Roar, Config.EngineSound.Hum", "use": "비행 내내 엔진음 (반복, 추력만큼 커짐)", "loop": true, "duration": 8,
+    {"name": "Engine", "config": "Config.EngineSound.Roar, Config.EngineSound.Hum", "use": "비행 내내 엔진음 (반복, 추력만큼 커짐)", "loop": true, "smallSpeaker": true, "duration": 8,
      "prompt": "Powerful rocket engine thrust heard from inside the spaceship cabin, deep rumbling roar with soft crackle, steady and continuous"},
-    {"name": "EngineLoud", "config": "Engine 의 다른 안 (고르면 Engine 자리에 씀)", "use": "비행 내내 엔진음, 노트북·폰 스피커에서도 잘 들리게 중음을 살린 안", "loop": true, "duration": 8,
+    {"name": "EngineLoud", "config": "Engine 의 다른 안 (고르면 Engine 자리에 씀)", "use": "비행 내내 엔진음, 노트북·폰 스피커에서도 잘 들리게 중음을 살린 안", "loop": true, "smallSpeaker": true, "duration": 8,
      "prompt": "Loud roaring rocket thruster blast, crackling exhaust with airy hiss over the rumble, steady and continuous"},
     {"name": "Launch", "config": "Config.Sounds.Launch", "use": "발사 순간", "duration": 3,
      "prompt": "Rocket engine ignition and liftoff, explosive blast and whoosh rising into a powerful roar, punchy cartoon game sound effect"},

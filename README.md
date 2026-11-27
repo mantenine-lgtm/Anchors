@@ -7,6 +7,7 @@ ROFLY(로블록스FLY) 게임 저장소. [Rojo](https://rojo.space)로 VS Code�
 - 기획서(온라인, 최신본): https://claude.ai/artifact/BPTtwcD7fyrYZ7Ac6vHFE4
 - `docs/concept-images`: 챕터별 콘셉트 이미지 (`old-v1`은 이전 버전)
 - `docs/diagrams`: 로켓 부품 그리드 다이어그램
+- `tools/sfx`: ElevenLabs로 효과음을 만들고(`generate.py`, 맥) 다듬는(`process.py`) 스크립트. 만든 소리 파일은 저장소에 올리지 않고 Roblox 에셋 ID로만 씁니다 (ElevenLabs 약관)
 
 ## 폴더 구조
 
