@@ -9,3 +9,7 @@ sourcemap.json
 
 # macOS
 .DS_Store
+
+# ElevenLabs 키 (`elevenlabs onboard` 가 만든 .env, 절대 올리지 않음)
+/.env
+/.env.local
