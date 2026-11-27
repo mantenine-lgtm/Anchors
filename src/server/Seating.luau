@@ -16,10 +16,16 @@ local R6_SIT = "rbxassetid://178130996"
 local GOLD = Color3.fromRGB(255, 205, 60)
 local GUARD_INTERVAL = 0.5 -- 자리에 고정한 캐릭터가 제자리에 있는지 다시 보는 간격(초)
 local GHOST_REFRESH = 6 -- 유령의 투명 처리를 되풀이하는 횟수 (늦게 붙는 장신구 대비, 약 3초 동안)
+local LOAD_STUCK = 60 -- 캐릭터가 생긴 뒤 이만큼(초) 지나도 Workspace 에 나타나지 않으면 불러오기가 멈춘 것으로 봄
 
 -- 플레이어마다 지금 잡아 둔 캐릭터와 자리 ("Crew:8", "Ghost:1"). 같은 캐릭터를 같은 자리에 두 번 꾸미지 않으려고
--- 기억합니다. 판이 끝날 때(releaseAll) 모두 지웁니다.
-local placed: { [Player]: { character: Model, key: string } } = {}
+-- 기억합니다. 자리를 지키는 반복(guard)은 이 기록(표) 자체를 들고 있다가, 기록이 바뀌거나 지워지면 멈춥니다.
+-- 판이 끝날 때(releaseAll) 모두 지웁니다.
+type Placement = { character: Model, key: string }
+local placed: { [Player]: Placement } = {}
+
+-- 플레이어마다 지금 캐릭터와 그 캐릭터가 생긴(CharacterAdded) 시각(게임이 돈 시간, time()). 멈춘 불러오기를 알아보는 데 씀
+local addedAt: { [Player]: { character: Model, at: number } } = {}
 
 local function isPlaced(player: Player, character: Model, key: string): boolean
 	local entry = placed[player]
@@ -129,12 +135,15 @@ end
 -- 자리에 고정한 캐릭터를 그 자리가 풀릴 때(판이 끝나거나 캐릭터가 바뀔 때)까지 지켜봄.
 -- 엔진이 새 캐릭터를 리스폰 지점으로 옮기는 때는 문서에 순서만 있고 시간은 없어서, 자리를 잡은 뒤에
 -- 뒤늦게 발사장으로 옮겨질 수 있습니다. 그때나 다른 이유로 자리를 벗어나면 다시 제자리에 둡니다.
-local function guard(player: Player, character: Model, key: string, cframe: CFrame, ghost: boolean)
+-- 자리 기록은 같은 표인지로 알아봅니다: 판이 끝나 기록이 지워진 뒤 같은 캐릭터가 같은 자리 이름으로 다시
+-- 잡혀도(새 판의 좌석 위치는 승무원 수에 따라 다를 수 있음) 지난 판의 반복은 멈춥니다.
+local function guard(player: Player, entry: Placement, cframe: CFrame, ghost: boolean)
+	local character = entry.character
 	task.spawn(function()
 		local checks = 0
 		while true do
 			task.wait(GUARD_INTERVAL)
-			if player.Parent ~= Players or player.Character ~= character or not isPlaced(player, character, key) then
+			if player.Parent ~= Players or player.Character ~= character or placed[player] ~= entry then
 				return
 			end
 			local rootPart = character:FindFirstChild("HumanoidRootPart")
@@ -168,12 +177,13 @@ function Seating.apply(player: Player)
 		local target = World.seatCFrame(seatIndex) * CFrame.new(0, Config.World.SeatRootOffset, 0.2)
 		local humanoid = hold(character, target)
 		if humanoid and not isPlaced(player, character, key) then
-			placed[player] = { character = character, key = key }
+			local entry: Placement = { character = character, key = key }
+			placed[player] = entry
 			playSit(character, humanoid)
 			if player:GetAttribute("Captain") == true then
 				addCrown(character)
 			end
-			guard(player, character, key, target, false)
+			guard(player, entry, target, false)
 		end
 	elseif role == "Ghost" then
 		local ghostIndex = player:GetAttribute("GhostIndex")
@@ -185,8 +195,9 @@ function Seating.apply(player: Player)
 		if hold(character, target) then
 			makeGhostly(character)
 			if not isPlaced(player, character, key) then
-				placed[player] = { character = character, key = key }
-				guard(player, character, key, target, true)
+				local entry: Placement = { character = character, key = key }
+				placed[player] = entry
+				guard(player, entry, target, true)
 			end
 		end
 	end
@@ -210,6 +221,11 @@ end
 -- 판이 끝나면 모두 발사장으로 돌려보냄 (캐릭터를 새로 만들어 고정·투명 상태를 한 번에 지움)
 function Seating.releaseAll()
 	table.clear(placed)
+	for player in pairs(addedAt) do
+		if player.Parent ~= Players then
+			addedAt[player] = nil
+		end
+	end
 	for index, player in ipairs(Players:GetPlayers()) do
 		player:SetAttribute("Role", "Lobby")
 		player:SetAttribute("Seat", 0)
@@ -217,9 +233,16 @@ function Seating.releaseAll()
 		player:SetAttribute("SpawnIndex", index)
 		-- 아직 불러오는 중인 캐릭터(방금 들어온 사람, 리스폰 중인 사람)는 고정도 투명 처리도 없으니 그대로 둡니다.
 		-- 불러오기가 끝나기 전에 또 부르지 말라는 것이 공식 문서의 안내이고, 다 만들어지면 onCharacterAdded 가
-		-- 방금 바꾼 역할(Lobby)대로 발사장에 둡니다.
+		-- 방금 바꾼 역할(Lobby)대로 발사장에 둡니다. 다만 LOAD_STUCK 초가 지나도 나타나지 않았으면 불러오기가
+		-- 멈춘 것으로 보고 다시 불러옵니다 (그대로 두면 다시 들어올 때까지 아바타가 없음).
 		local character = player.Character
-		if character and character:IsDescendantOf(Workspace) then
+		local seen = addedAt[player]
+		local stuck = character ~= nil
+			and not character:IsDescendantOf(Workspace)
+			and seen ~= nil
+			and seen.character == character
+			and time() - seen.at > LOAD_STUCK
+		if character and (character:IsDescendantOf(Workspace) or stuck) then
 			task.spawn(function()
 				-- 새 이름(LoadCharacterAsync)을 먼저 쓰고, 없는 버전이면 예전 이름으로
 				local ok = pcall(function()
@@ -237,6 +260,7 @@ end
 
 -- 캐릭터가 생길 때: 판 중이면 좌석/유령 자리로, 아니면 발사장 리스폰 자리로
 function Seating.onCharacterAdded(player: Player, character: Model)
+	addedAt[player] = { character = character, at = time() }
 	if not waitUntilSpawned(player, character) then
 		return
 	end

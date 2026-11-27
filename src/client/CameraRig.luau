@@ -42,7 +42,8 @@ local handoverFrom: Model? = nil
 local handoverStart = 0
 local subjectPending = false -- 기다리다 넘긴 뒤, 늦게 나타날 새 캐릭터를 카메라가 따라가게 해야 하는지
 local movementLocked = false -- 지금 바라는 조작 상태 (타 있는 동안 true)
-local resetToken = 0
+local resetApplied: boolean? = nil -- 초기화 버튼에 마지막으로 적용한 값 (nil = 아직 적용한 적 없음)
+local resetSyncing = false -- 초기화 버튼을 맞추는 반복이 돌고 있는지
 
 -- ------------------------------------------------------------ 조작과 기본 UI 켜고 끄기
 local function getControls(): any
@@ -61,6 +62,38 @@ local function getControls(): any
 		end
 	end
 	return controls
+end
+
+-- 캐릭터 초기화 버튼을 지금 바라는 상태(타 있으면 끔)로 맞춤. 클라이언트가 막 시작했을 때는 SetCore 가
+-- 실패하므로 0.5초마다 다시 해 봅니다(8번 실패하면 그만둠). 반복은 하나만 돌고, 돌 때마다 바라는 상태를
+-- 새로 읽으므로 그 사이에 여러 번 바뀌어도 마지막 상태로 맞춰집니다.
+local function syncResetButton()
+	if resetSyncing then
+		return
+	end
+	resetSyncing = true
+	task.spawn(function()
+		local failures = 0
+		while true do
+			local want = not movementLocked
+			if resetApplied == want then
+				break
+			end
+			local ok = pcall(function()
+				StarterGui:SetCore("ResetButtonCallback", want)
+			end)
+			if ok then
+				resetApplied = want
+			else
+				failures += 1
+				if failures >= 8 then
+					break
+				end
+				task.wait(0.5)
+			end
+		end
+		resetSyncing = false
+	end)
 end
 
 -- 타 있는 동안 이동·점프·캐릭터 초기화를 잠그고, 내리면 풉니다. 상태가 바뀔 때만 일합니다.
@@ -87,22 +120,7 @@ local function lockMovement(locked: boolean)
 		GuiService.TouchControlsEnabled = not locked
 	end)
 	-- 타 있는 동안 캐릭터 초기화를 막음 (자리에서 떨어지지 않게)
-	resetToken += 1
-	local token = resetToken
-	task.spawn(function()
-		for _ = 1, 8 do
-			if token ~= resetToken then
-				return -- 그 사이에 다시 바뀌었으면 새 요청이 맡음
-			end
-			local ok = pcall(function()
-				StarterGui:SetCore("ResetButtonCallback", not locked)
-			end)
-			if ok then
-				break
-			end
-			task.wait(0.5)
-		end
-	end)
+	syncResetButton()
 end
 
 -- ------------------------------------------------------------ 벽 숨기기
@@ -167,7 +185,7 @@ end
 
 -- 선실 시점에서 전광판(테두리 포함) 아래 끝이 화면 높이의 어디에 오는지 (0 = 맨 위, 1 = 맨 아래).
 -- 카메라의 세로 시야각은 창 모양과 상관없이 같으므로 이 비율은 창이 넓든 좁든 같습니다.
--- (휴대폰의 안전 영역 여백만큼은 화면 글자의 높이와 어긋나는데, 그만큼은 Hud 가 틈을 넉넉히 둡니다.)
+-- (휴대폰은 화면 글자가 안전 영역 안에만 그려져 비율이 조금 다른데, 그 변환은 Hud 가 합니다.)
 -- 승무원 수에 따라 카메라 자리가 달라져도 따라갑니다.
 local function boardBottom(): number
 	local board = findBoard()

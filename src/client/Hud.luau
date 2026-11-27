@@ -3,7 +3,9 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TextService = game:GetService("TextService")
 local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared:WaitForChild("Config"))
@@ -84,16 +86,46 @@ local endUntil = 0
 -- 화면 번쩍임
 local flashFrame: Frame
 
--- 한 줄 안내·위기 경고·아이템 알림을 두는 높이 (화면 높이에 대한 비율). 선실 전광판 바로 아래.
--- 틈은 화면 높이의 2%: 휴대폰은 3D 화면이 전체 화면에 그려지고 이 글자는 안전 영역 안에만 그려져서
--- 두 높이가 조금 다르므로(아래쪽 여백만큼), 그 차이를 덮을 만큼 둡니다.
+-- 한 줄 안내·위기 경고·아이템 알림을 두는 높이 (화면 높이에 대한 비율). 선실 전광판 바로 아래, 틈은 화면 높이의 2%.
 local UNDER_BOARD_GAP = 0.02
-local UNDER_BOARD_MAX = 0.41 -- 이보다 내려가면 아이템 알림(+72, 높이 42)이 그 아래 '감사 N'(아래에서 270)과 겹침
+-- 승무원이 많아 전광판이 화면 아래쪽까지 보이면, 아이템 알림(안내에서 +72, 높이 42)이 그 아래 '감사 N'
+-- (아래 끝이 화면 아래에서 270, 높이 30)에 닿기 직전에서 멈춤. 한도는 화면 높이(기준 단위)로 계산합니다.
+local BANNER_BOTTOM = 72 + 42
+local THANKS_TOP = 270 + 30
 local underBoard = State.BoardBottomDefault + UNDER_BOARD_GAP
+
+-- 바탕(root)의 높이를 기준 단위로 (화면 전체를 줄이는 UIScale 을 되돌림)
+local function rootHeight(): number
+	local height = root.AbsoluteSize.Y
+	local scale = root:FindFirstChildOfClass("UIScale")
+	if scale and scale.Scale > 0 then
+		height /= scale.Scale
+	end
+	return if height > 0 then height else Ui.RefHeight
+end
+
+-- 전광판 아래 끝(3D 화면 전체에 대한 비율)을 이 화면 글자 판(ScreenGui)에 대한 비율로 바꿈.
+-- 휴대폰은 3D 화면이 전체 화면에 그려지고 화면 글자는 안전 영역(노치·홈 막대를 뺀 곳) 안에만 그려져서
+-- 두 비율이 조금 다릅니다.
+local function boardBottomOnGui(): number
+	local camera = Workspace.CurrentCamera
+	local gui = root.Parent
+	if camera and gui and gui:IsA("ScreenGui") then
+		local full = camera.ViewportSize.Y
+		local top = gui.AbsolutePosition.Y
+		local height = gui.AbsoluteSize.Y
+		if full > 0 and height > 0 then
+			return (State.boardBottom * full - top) / height
+		end
+	end
+	return State.boardBottom
+end
 
 -- 전광판이 화면에 보이는 자리가 바뀌면(승무원 수에 따라 카메라가 달라짐) 그 아래 글자도 따라 옮김
 local function placeUnderBoard()
-	local top = math.min(State.boardBottom + UNDER_BOARD_GAP, UNDER_BOARD_MAX)
+	local height = rootHeight()
+	local lowest = (height - THANKS_TOP - BANNER_BOTTOM) / height
+	local top = math.min(boardBottomOnGui() + UNDER_BOARD_GAP, lowest)
 	if math.abs(top - underBoard) < 0.0005 then
 		return
 	end
@@ -408,6 +440,11 @@ local function pressLaunch()
 	Net.event("Launch"):FireServer(now)
 end
 
+local RESULTS_WIDTH = 700 -- 정산 판의 너비 (기준 단위)
+local ROW_TEXT_LEFT = 160 -- 정산 줄 글자의 왼쪽 끝
+local ROW_TEXT_WIDTH = RESULTS_WIDTH - ROW_TEXT_LEFT - 34 -- 정산 줄 글자가 들어갈 너비
+local ROW_MIN_SIZE = 14 -- 이름이 길어 글자를 줄일 때 가장 작은 크기
+
 local function buildResults()
 	endLabel = Ui.label(root, "EndLabel", "", 58, {
 		AnchorPoint = Vector2.new(0.5, 0.5),
@@ -419,11 +456,28 @@ local function buildResults()
 	resultsPanel = Ui.panel(root, "Results", {
 		AnchorPoint = Vector2.new(0.5, 0.5),
 		Position = UDim2.fromScale(0.5, 0.53),
-		Size = UDim2.fromOffset(700, 496),
+		Size = UDim2.fromOffset(RESULTS_WIDTH, 496),
 		BackgroundTransparency = 0.03,
 		Visible = false,
 	})
 	Ui.stroke(resultsPanel, C.Line, 2, 0)
+end
+
+-- 글자가 정산 줄 한 줄에 들어가는 가장 큰 크기: size 에서 2씩 줄여 ROW_MIN_SIZE 까지.
+-- TextScaled 와 UITextSizeConstraint 는 화면 전체를 줄이는 UIScale 아래에서 어떻게 되는지 문서로 확인되지
+-- 않아 쓰지 않고, 글자 너비를 직접 잽니다 (너비는 글자 크기에 비례하므로 기준 단위 그대로 견줌).
+local function rowTextSize(text: string, size: number): number
+	local fit = size
+	while fit > ROW_MIN_SIZE do
+		local ok, bounds = pcall(function()
+			return TextService:GetTextSize(text, fit, Ui.Font, Vector2.new(100000, 1000))
+		end)
+		if not ok or bounds.X <= ROW_TEXT_WIDTH then
+			break
+		end
+		fit = math.max(fit - 2, ROW_MIN_SIZE)
+	end
+	return fit
 end
 
 local function resultRow(parent: Instance, y: number, title: string, text: string, color: Color3, size: number)
@@ -433,17 +487,14 @@ local function resultRow(parent: Instance, y: number, title: string, text: strin
 		TextColor3 = C.Dim,
 		TextXAlignment = Enum.TextXAlignment.Left,
 	})
-	-- 이름이 길면 판 밖으로 나가는 대신 글자가 틀에 맞게 작아짐 (가장 클 때가 size, 뒤쪽 숫자가 잘리지 않음).
-	-- 틀 높이가 빠듯하면 짧은 글자도 작아지므로 위아래로 2씩 넉넉하게 둠.
-	local label = Ui.label(parent, "RowText", text, size, {
-		Position = UDim2.fromOffset(160, y - 2),
-		Size = UDim2.new(1, -194, 0, size + 12),
+	-- 이름이 길면 판 밖으로 나가는 대신 글자를 줄여 한 줄에 맞춤 (가장 클 때가 size, 뒤쪽 숫자가 잘리지 않음)
+	Ui.label(parent, "RowText", text, rowTextSize(text, size), {
+		Position = UDim2.fromOffset(ROW_TEXT_LEFT, y),
+		Size = UDim2.new(1, -(ROW_TEXT_LEFT + 34), 0, size + 8),
 		TextColor3 = color,
 		TextXAlignment = Enum.TextXAlignment.Left,
-		TextScaled = true,
 		TextTruncate = Enum.TextTruncate.AtEnd, -- 가장 작게 해도 넘치면 끝을 줄임
 	})
-	Ui.make("UITextSizeConstraint", { MinTextSize = 12, MaxTextSize = size, Parent = label })
 end
 
 local LAUNCH_TEXT = {

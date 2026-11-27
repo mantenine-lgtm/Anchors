@@ -197,7 +197,7 @@ function Board.update(_dt: number)
 		headLabel.Text = string.format("로켓 조립 · 승무원 %d명 · %s", State.number("CrewCount"), Fmt.clock(State.phaseLeft()))
 		for id, bar in pairs(buildBars) do
 			local total = State.buildTotal(id)
-			-- 막대 길이는 자릿수 기준 (파워가 10배가 될 때마다 한 칸). 가장 센 구성(전설 Lv10 50명)이 약 5.9 자리라 6 칸으로 나눔
+			-- 막대 길이는 자릿수 기준 (파워가 10배가 될 때마다 한 칸). 가장 센 구성(전설 Lv10 50명)이 약 5.8 자리(데모 1은 시너지 없음)라 6 칸으로 나눔
 			local digits = math.log10(1 + total / Config.Flight.RefPower)
 			bar.fill.Size = UDim2.fromScale(math.clamp(digits / 6, 0.02, 1), 1)
 			bar.value.Text = Fmt.comma(total)
