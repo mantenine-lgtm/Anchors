@@ -20,6 +20,7 @@ local Scoring = require(Shared:WaitForChild("Scoring"))
 local Assembly = require(script.Parent.Assembly)
 local Bots = require(script.Parent.Bots)
 local Metrics = require(script.Parent.Metrics)
+local PartProgress = require(script.Parent.PartProgress)
 local Seating = require(script.Parent.Seating)
 local World = require(script.Parent.World)
 
@@ -36,6 +37,7 @@ type Member = {
 	seat: number, -- 승무원 번호 = 탑승 자리 번호 (속성 Seat). 의자는 없지만 조립 그리드·클로즈업·하트가 이 번호로 사람을 알아봄
 	isCaptain: boolean,
 	loadout: { [string]: number },
+	parts: Parts.PartLevels?, -- '각자 부품'일 때 사람의 부품 레어도·레벨 (조립 화면에 보임)
 	power: number,
 	successes: number,
 	attempts: number,
@@ -218,8 +220,16 @@ local function runJoin(): { Player }
 end
 
 -- ------------------------------------------------------------ 빌드
+-- 장비 묶음이 '각자 부품'(Own)이면 사람은 조립이 시작할 때의 자기 부품 레어도·레벨로, 봇과 다른 묶음은 묶음 장비로
 local function newMember(id: string, name: string, player: Player?, botIndex: number): Member
-	local loadout = Parts.loadout(options.gear)
+	local parts: Parts.PartLevels? = nil
+	local loadout
+	if player and Parts.preset(options.gear).Own then
+		parts = PartProgress.parts(player.UserId)
+		loadout = Parts.ownLoadout(parts :: Parts.PartLevels)
+	else
+		loadout = Parts.loadout(options.gear)
+	end
 	return {
 		id = id,
 		name = name,
@@ -230,6 +240,7 @@ local function newMember(id: string, name: string, player: Player?, botIndex: nu
 		seat = 0,
 		isCaptain = false,
 		loadout = loadout,
+		parts = parts,
 		power = Parts.loadoutPower(loadout),
 		successes = 0,
 		attempts = 0,
@@ -586,6 +597,26 @@ local function stepShadows(round: any, rate: number?)
 	end
 end
 
+-- 비행 중 부품 경험치 (밸런스 스레드 11-27: 거리 말고 시간 기준). 지난번에 준 뒤로 흐른 비행 시간 × ExpPerSecond 를
+-- 탄 사람(나가지 않은 사람)의 부품 6개에 주고 그 사람에게 알림. 봇·관전자는 없음. force 가 아니면 SendInterval 초마다 한 번만.
+local function awardPartExp(round: any, force: boolean)
+	local sim = round.sim
+	if not force and sim.t - round.expAt < Config.Progress.SendInterval - 1e-6 then -- 1e-6: 비행 시각을 더해 가며 생기는 오차
+		return
+	end
+	local gain = (sim.t - round.expAt) * Config.Progress.ExpPerSecond
+	round.expAt = sim.t
+	if not (gain > 0) then
+		return
+	end
+	for _, member in ipairs(round.crew) do
+		local player = member.player
+		if player and not member.left and player.Parent == Players then
+			PartProgress.send(player, PartProgress.award(player.UserId, gain))
+		end
+	end
+end
+
 local function runFlight(round: any)
 	local sim = FlightSim.new(round.totals, round.captainBonus)
 	round.sim = sim
@@ -602,6 +633,7 @@ local function runFlight(round: any)
 
 	local dt = Config.Flight.Dt
 	local missionIndex = 1
+	round.expAt = sim.t -- 부품 경험치를 마지막으로 준 비행 시각
 	local resolveAt = Missions.resolveTime(1)
 	local accumulator = 0
 	local lastSync = 0
@@ -671,6 +703,7 @@ local function runFlight(round: any)
 			lastSync = sim.t
 			syncFlight(round)
 		end
+		awardPartExp(round, false)
 		if consumeSkip() or sim.t >= Config.Phase.FlightMax then
 			sim.ended = true
 		end
@@ -679,6 +712,7 @@ local function runFlight(round: any)
 	round.ended = true
 	round.mission = nil
 	syncFlight(round)
+	awardPartExp(round, true)
 	state:SetAttribute("Crisis", false)
 	state:SetAttribute("Escaped", sim.escaped)
 	Net.event("FlightEnd"):FireAllClients({
@@ -1130,6 +1164,20 @@ local function connectRemotes()
 		if member then
 			Assembly.autoPlace(round.assembly, member)
 		end
+	end)
+
+	-- 내 부품 레벨·경험치를 다시 보내 달라 (화면이 처음 뜰 때). 너무 자주 오면 무시
+	local progressAsked: { [Player]: number } = {}
+	Net.event("PartProgress").OnServerEvent:Connect(function(player: Player)
+		local t = now()
+		if t - (progressAsked[player] or -math.huge) < 0.5 then
+			return
+		end
+		progressAsked[player] = t
+		PartProgress.send(player)
+	end)
+	Players.PlayerRemoving:Connect(function(player: Player)
+		progressAsked[player] = nil
 	end)
 
 	Net.event("UseItem").OnServerEvent:Connect(function(player: Player, itemId: any)

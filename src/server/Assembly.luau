@@ -6,6 +6,7 @@
 -- 그리드는 RoundState 아래 Grid 폴더의 속성으로 클라이언트에 알립니다 (긴 글자 하나 대신 짧은 속성 여러 개):
 --   Grid           Round, Size(한 변 칸 수), Rarity·Level(이번 판 장비), Name<좌석>·Bot<좌석>(승무원)
 --   Grid/<종류 Id>  C<칸 번호> = 꽂은 승무원의 좌석 번호 (0 = 열린 빈 칸). 속성이 없는 칸은 닫힌 칸.
+--                  Ra<좌석>·Lv<좌석> = 그 승무원의 이 종류 부품 레어도·레벨 ('각자 부품'일 때 사람만. 없으면 Grid 의 Rarity·Level)
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -26,6 +27,7 @@ type Member = {
 	seat: number,
 	left: boolean,
 	loadout: { [string]: number },
+	parts: { [string]: { rarity: number, level: number } }?, -- 자기 부품을 꽂는 사람만 (없으면 이번 판 장비)
 }
 
 type BotStep = { at: number, member: Member, typeId: string }
@@ -85,32 +87,37 @@ local function put(session: Session, member: Member, typeId: string, cell: numbe
 	return "ok"
 end
 
--- 아직 안 꽂은 종류를 빈 칸에 무작위로 꽂음. 처음 꽂은 종류와 꽂은 개수를 돌려줌.
-local function fill(session: Session, member: Member): (string?, number)
-	local first: string? = nil
-	local count = 0
+-- 아직 안 꽂은 종류를 빈 칸에 무작위로 꽂음. 꽂은 종류들을 돌려줌.
+local function fill(session: Session, member: Member): { string }
+	local placed: { string } = {}
 	local mine = session.placed[member]
 	for _, info in ipairs(Config.Parts.Types) do
 		if mine[info.Id] == nil then
 			local empty = emptyCells(session, info.Id)
 			if #empty > 0 then
 				put(session, member, info.Id, empty[session.rng:NextInteger(1, #empty)])
-				first = first or info.Id
-				count += 1
+				table.insert(placed, info.Id)
 			end
 		end
 	end
-	return first, count
+	return placed
+end
+
+-- 그 승무원의 그 종류 부품 레어도 (자기 부품이 없으면 이번 판 장비)
+local function rarityOf(session: Session, member: Member, typeId: string): number
+	local part = member.parts and member.parts[typeId]
+	return if part then part.rarity else session.rarity
 end
 
 -- 기획서 '장착 연출': 영웅·전설 부품을 꽂으면 전원에게 알림. 한 판에 사람마다 처음 한 번만 (같은 장비라 매번 알리면 시끄러움).
 local function announceRare(session: Session, member: Member, typeId: string)
-	if member.isBot or session.announced[member] or session.rarity < Config.Build.AnnounceRarity then
+	local rarity = rarityOf(session, member, typeId)
+	if member.isBot or session.announced[member] or rarity < Config.Build.AnnounceRarity then
 		return
 	end
 	session.announced[member] = true
 	local info = Grid.typeInfo(typeId)
-	local rarityName = Config.Parts.RarityNames[session.rarity] or ""
+	local rarityName = Config.Parts.RarityNames[rarity] or ""
 	Net.event("Announce"):FireAllClients(string.format("%s 님, %s %s 장착!", member.name, rarityName, if info then info.Name else typeId))
 end
 
@@ -164,6 +171,13 @@ function Assembly.begin(state: Instance, roundNumber: number, crew: { Member }, 
 			cells[cell] = false
 			typeFolder:SetAttribute("C" .. cell, 0)
 		end
+		for _, member in ipairs(crew) do
+			local part = member.parts and member.parts[info.Id]
+			if part then
+				typeFolder:SetAttribute("Ra" .. member.seat, part.rarity)
+				typeFolder:SetAttribute("Lv" .. member.seat, part.level)
+			end
+		end
 		session.cells[info.Id] = cells
 		session.typeFolders[info.Id] = typeFolder
 		typeFolder.Parent = folder
@@ -212,11 +226,18 @@ function Assembly.autoPlace(session: Session, member: Member): number
 	if session.finished or member.left or session.placed[member] == nil then
 		return 0
 	end
-	local first, count = fill(session, member)
-	if first then
-		announceRare(session, member, first)
+	local placed = fill(session, member)
+	-- 한 번에 여러 개를 꽂으면 가장 귀한 부품으로 알림
+	local best: string? = nil
+	for _, typeId in ipairs(placed) do
+		if best == nil or rarityOf(session, member, typeId) > rarityOf(session, member, best) then
+			best = typeId
+		end
 	end
-	return count
+	if best then
+		announceRare(session, member, best)
+	end
+	return #placed
 end
 
 -- 꽂을 시각이 된 봇 부품을 빈 칸에 꽂음
@@ -276,7 +297,7 @@ function Assembly.finish(session: Session): { [Member]: number }
 	local filled: { [Member]: number } = {}
 	for _, member in ipairs(session.crew) do
 		if not member.left then
-			local _, count = fill(session, member)
+			local count = #fill(session, member)
 			if count > 0 then
 				filled[member] = count
 			end
