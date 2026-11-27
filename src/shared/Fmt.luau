@@ -54,4 +54,23 @@ function Fmt.percent(ratio: number): string
 	return string.format("%d%%", math.floor(ratio * 100 + 0.5))
 end
 
+-- 낱말 뒤에 붙는 조사: Fmt.josa("터보 엔진", "을", "를") -> "터보 엔진을", Fmt.josa("구원 연료", "을", "를") -> "구원 연료를".
+-- withFinal 은 마지막 글자에 받침이 있을 때, withoutFinal 은 없을 때. "으로/로" 는 받침이 ㄹ 이어도 "로".
+-- 한글로 끝나지 않으면(영문·숫자) 받침 없음으로 봅니다.
+function Fmt.josa(word: string, withFinal: string, withoutFinal: string): string
+	local last: number? = nil
+	for _, code in utf8.codes(word) do
+		last = code
+	end
+	local final = 0
+	if last ~= nil and last >= 0xAC00 and last <= 0xD7A3 then
+		final = (last - 0xAC00) % 28
+	end
+	local hasFinal = final ~= 0
+	if withFinal == "으로" and final == 8 then
+		hasFinal = false -- ㄹ 받침: "웜홀로"
+	end
+	return word .. (if hasFinal then withFinal else withoutFinal)
+end
+
 return Fmt

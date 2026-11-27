@@ -87,8 +87,8 @@ Config.Captain = {
 -- 구원 연료 (임시: 기획서에 수치 없음. 시뮬레이션으로 잡음)
 -- 쓰는 순간 로켓 속도를 충격파 속도 × Match 까지 끌어올리고, Hold 초 동안 충격파와 같은 비율(+Extra)로 가속.
 -- 신규 10명 기준 위기 막바지에 쓰면 거리 약 1.7~2.2배.
+-- 티켓 값은 아래 Config.Boosters 에 있습니다. 클로즈업·감사 버튼 값은 부스터 6종이 함께 씁니다.
 Config.Rescue = {
-	TicketCost = 1,
 	Match = 1.0,
 	Hold = 5,
 	Extra = 0,
@@ -96,6 +96,28 @@ Config.Rescue = {
 	ThanksWindow = 5, -- 감사 버튼이 떠 있는 시간(초)
 	ThanksGrace = 1, -- 서버가 더 받아 주는 여유(초)
 	ThanksCoins = 5, -- 임시: 감사를 누른 사람이 받는 코인
+}
+
+-- 부스터: 비행 중에 쓰는 현질 아이템 6종. 화면 왼쪽 메뉴에 떠 있고, 누르면 바로 씁니다.
+-- 종류마다 한 비행에 로켓 전체에서 1번 (먼저 누른 사람이 씀). 데모는 Robux 대신 티켓을 씁니다.
+-- 효과는 기획서 표 그대로이고, 수치(Seconds, Value)는 임시입니다 (기획서에 수치 없음).
+-- 모든 줄이 같은 칸을 갖게 해서 타입 검사가 편하도록, 안 쓰는 칸은 0 입니다.
+Config.Boosters = {
+	List = {
+		-- 위기 구간에서만. 효과 수치는 위의 Config.Rescue
+		{ Id = "RescueFuel", Name = "구원 연료", Cost = 1, Seconds = 0, Value = 0, Desc = "위기 때 충격파 속도까지 가속" },
+		-- Seconds 초 동안 속도 × Value
+		{ Id = "Turbo", Name = "터보 엔진", Cost = 1, Seconds = 20, Value = 2, Desc = "20초간 속도 2배" },
+		-- 쓰는 순간 기본 속도 × (1 + Value). 빠를 때 쓸수록 더 많이 빨라짐
+		{ Id = "Slingshot", Name = "중력 새총", Cost = 1, Seconds = 0, Value = 0.5, Desc = "지금 속도에 비례해 +50% 가속" },
+		-- 지금 속도로 Seconds 초 갈 거리를 순간이동 (충격파는 그대로)
+		{ Id = "Wormhole", Name = "웜홀", Cost = 1, Seconds = 15, Value = 0, Desc = "지금 속도로 15초 갈 거리를 순간이동" },
+		-- 쓴 뒤로 나는 거리의 코인 × Value (탄 사람 모두)
+		{ Id = "Golden", Name = "황금 항로", Cost = 1, Seconds = 0, Value = 2, Desc = "이후 거리의 코인 2배 (모두)" },
+		-- Seconds 초 동안 미션 가속 × Value
+		{ Id = "Resonance", Name = "공명 코어", Cost = 1, Seconds = 30, Value = 2, Desc = "30초간 미션 보너스 2배" },
+	},
+	PendingSeconds = 1.5, -- 누른 뒤 서버가 받아 주지 않으면 이만큼 뒤 다시 누를 수 있게 함
 }
 
 -- 위기 구간: 충격파 도달 예상 시간이 EnterEta 이하면 시작
@@ -169,7 +191,7 @@ Config.Rewards = {
 	CoinsPerKm = 10, -- 코인 = 거리(km) × 이 값 (버림)
 	AfkCoinFactor = 0.5,
 	AwardTickets = 1, -- 시상 1개당 티켓
-	StartTickets = 0,
+	StartTickets = 3, -- 임시: 서버에 들어올 때 받는 티켓 (첫 판부터 부스터를 눌러 볼 수 있게)
 	ExpectedRate = 0.85, -- 빌드 페이즈 예상 거리에 쓰는 미션 성공률
 }
 

@@ -3,6 +3,7 @@
 -- 식과 계산 순서는 기획서 '수치 밸런스' 탭의 시뮬레이터(v8)와 같습니다.
 -- 로켓도 충격파도 실제로 움직이지 않고, 숫자(거리·속도)만 계산합니다.
 
+local Boosters = require(script.Parent.Boosters)
 local Config = require(script.Parent.Config)
 
 local F = Config.Flight
@@ -42,6 +43,10 @@ export type Sim = {
 	escaped: boolean,
 	rescueUntil: number, -- 구원 연료가 끝나는 시각 (안 썼으면 -1)
 	rescueExtra: number,
+	turboUntil: number, -- 터보 엔진이 끝나는 시각 (안 썼으면 -1)
+	turboMultiplier: number, -- 터보 엔진이 켜져 있는 동안의 속도 배율
+	resonanceUntil: number, -- 공명 코어가 끝나는 시각 (안 썼으면 -1)
+	resonanceMultiplier: number, -- 공명 코어가 켜져 있는 동안의 미션 가속 배율
 }
 
 -- 파워 자릿수: 파워가 10배가 되면 1씩 늘어남
@@ -83,6 +88,10 @@ function FlightSim.new(totals: Totals, captainBonus: number): Sim
 		escaped = false,
 		rescueUntil = -1,
 		rescueExtra = 0,
+		turboUntil = -1,
+		turboMultiplier = 1,
+		resonanceUntil = -1,
+		resonanceMultiplier = 1,
 	}
 end
 
@@ -121,8 +130,16 @@ function FlightSim.phaseAt(t: number, hot: number, fuel: number, sail: number, r
 	return "coast"
 end
 
+-- 터보 엔진이 켜져 있으면 그 배율, 아니면 1
+local function turboFactor(sim: Sim): number
+	if sim.t < sim.turboUntil then
+		return sim.turboMultiplier
+	end
+	return 1
+end
+
 function FlightSim.speed(sim: Sim): number
-	return sim.vb * (1 + sim.boost)
+	return sim.vb * (1 + sim.boost) * turboFactor(sim)
 end
 
 -- 미션 판정 반영. r = 팀 성공률(0~1)
@@ -133,7 +150,8 @@ function FlightSim.applyMission(sim: Sim, r: number)
 		sim.combo = 0
 	end
 	local perfect = if r >= 1 - 1e-9 then F.PerfectMultiplier else 1
-	sim.boost += sim.stats.kick * r * (1 + sim.stats.step * sim.combo) * perfect
+	local resonance = if sim.t < sim.resonanceUntil then sim.resonanceMultiplier else 1
+	sim.boost += sim.stats.kick * r * (1 + sim.stats.step * sim.combo) * perfect * resonance
 end
 
 -- 한 칸(Dt) 진행. 이 칸에서 미션이 판정되면 missionRate 에 팀 성공률을 넘깁니다.
@@ -147,7 +165,7 @@ function FlightSim.step(sim: Sim, missionRate: number?)
 	if missionRate ~= nil then
 		FlightSim.applyMission(sim, missionRate)
 	end
-	local v = sim.vb * (1 + sim.boost)
+	local v = sim.vb * (1 + sim.boost) * turboFactor(sim)
 	sim.x += v * dt
 	sim.w *= math.exp((F.WaveRate + F.WaveRateGrowth * sim.t) * dt)
 	sim.s += sim.w * dt
@@ -177,7 +195,7 @@ end
 -- 구원 연료: 로켓 속도를 충격파 속도까지 끌어올리고 잠깐 같이 가속
 function FlightSim.rescue(sim: Sim)
 	local R = Config.Rescue
-	local need = sim.w * R.Match / (1 + sim.boost)
+	local need = sim.w * R.Match / ((1 + sim.boost) * turboFactor(sim))
 	if sim.vb < need then
 		sim.vb = need
 	end
@@ -185,7 +203,36 @@ function FlightSim.rescue(sim: Sim)
 	sim.rescueExtra = R.Extra
 end
 
--- 미션 없이 끝까지 진행 (구원 연료를 안 썼을 때의 거리 계산용)
+-- 부스터 효과를 비행 계산에 넣음. 황금 항로는 보상만 바꾸므로 여기서는 하는 일이 없습니다.
+-- 효과를 넣을 수 있으면 true (이미 끝난 비행이거나 모르는 Id 면 false)
+function FlightSim.applyBooster(sim: Sim, id: string): boolean
+	local info = Boosters.get(id)
+	if info == nil or sim.ended then
+		return false
+	end
+	if id == "RescueFuel" then
+		FlightSim.rescue(sim)
+	elseif id == "Turbo" then
+		sim.turboUntil = sim.t + info.Seconds
+		sim.turboMultiplier = info.Value
+	elseif id == "Slingshot" then
+		sim.vb *= 1 + info.Value
+	elseif id == "Wormhole" then
+		-- 충격파는 그대로 두고 로켓만 앞으로. 루트 끝을 넘으면 탈출
+		sim.x += FlightSim.speed(sim) * info.Seconds
+		if sim.x >= F.RouteEnd then
+			sim.x = F.RouteEnd
+			sim.ended = true
+			sim.escaped = true
+		end
+	elseif id == "Resonance" then
+		sim.resonanceUntil = sim.t + info.Seconds
+		sim.resonanceMultiplier = info.Value
+	end
+	return true
+end
+
+-- 미션 없이 끝까지 진행 (부스터를 안 썼을 때의 거리 계산용)
 function FlightSim.runToEnd(sim: Sim)
 	local guard = 0
 	local maxSteps = Config.Phase.FlightMax / F.Dt
