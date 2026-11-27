@@ -264,21 +264,68 @@ Config.World = {
 	StudsPerMeter = 3.57,
 }
 
--- 소리 (임시: Roblox 기본 내장 소리. 나중에 크리에이터 스토어 소리로 교체)
+-- 소리 (임시 효과음. 나중에 바꾸려면 Id 만 고치면 됨)
+-- Roblox 기본 내장 소리 파일(rbxasset://sounds/...)은 지금 설치본에 11개만 남아 있습니다
+-- (2026-11 맥 Studio 설치 폴더 content/sounds 에서 확인: action_falling.ogg, impact_explosion_03.mp3 등).
+-- 예전 파일(Rocket shot.wav, victory.wav 등)은 없어서 그 경로로는 소리가 나지 않으므로, Roblox 가 같은 소리를
+-- 공개 에셋으로 올려 둔 것(크리에이터 스토어, 만든 이 @Roblox, 설명이 \sounds\<파일 이름>)의 에셋 ID 를 씁니다.
 Config.Sounds = {
-	Countdown = { Id = "rbxasset://sounds/electronicpingshort.wav", Volume = 0.6 },
-	Launch = { Id = "rbxasset://sounds/Rocket shot.wav", Volume = 0.9 },
-	MissionSuccess = { Id = "rbxasset://sounds/victory.wav", Volume = 0.35 },
-	Combo = { Id = "rbxasset://sounds/bass.wav", Volume = 0.6 },
-	CrisisAlarm = { Id = "rbxasset://sounds/electronicpingshort.wav", Volume = 0.8 },
-	ItemUse = { Id = "rbxasset://sounds/Rocket whoosh 01.wav", Volume = 0.9 },
-	Press = { Id = "rbxasset://sounds/clickfast.wav", Volume = 0.5 },
-	Wrong = { Id = "rbxasset://sounds/uuhhh.mp3", Volume = 0.25 },
-	Caught = { Id = "rbxasset://sounds/impact_explosion_03.mp3", Volume = 0.9 },
-	Thunder = { Id = "rbxasset://sounds/HalloweenThunder.wav", Volume = 0.25 },
-	Thanks = { Id = "rbxasset://sounds/switch.wav", Volume = 0.5 },
-	PartPlace = { Id = "rbxasset://sounds/clickfast.wav", Volume = 0.8 }, -- 내 부품을 꽂음
-	LaunchAlert = { Id = "rbxasset://sounds/electronicpingshort.wav", Volume = 1 }, -- 선장 발사 임박 (세 번 연달아 울림)
+	Countdown = { Id = "rbxassetid://12221990", Volume = 0.6 }, -- electronicpingshort.wav
+	Launch = { Id = "rbxassetid://12222084", Volume = 0.9 }, -- Rocket shot.wav
+	MissionSuccess = { Id = "rbxassetid://12222253", Volume = 0.35 }, -- victory.wav
+	Combo = { Id = "rbxassetid://12221944", Volume = 0.6 }, -- bass.wav
+	CrisisAlarm = { Id = "rbxassetid://12221990", Volume = 0.8 }, -- electronicpingshort.wav
+	ItemUse = { Id = "rbxassetid://12222095", Volume = 0.9 }, -- Rocket whoosh 01.wav
+	Press = { Id = "rbxassetid://12221976", Volume = 0.5 }, -- clickfast.wav
+	Wrong = { Id = "rbxassetid://12222242", Volume = 0.25 }, -- uuhhh.wav
+	Caught = { Id = "rbxasset://sounds/impact_explosion_03.mp3", Volume = 0.9 }, -- 기본 내장 (설치본에 있음)
+	Thunder = { Id = "rbxassetid://12222030", Volume = 0.25 }, -- HalloweenThunder.wav
+	Thanks = { Id = "rbxassetid://12222170", Volume = 0.5 }, -- switch.wav
+	PartPlace = { Id = "rbxassetid://12221976", Volume = 0.8 }, -- clickfast.wav. 내 부품을 꽂음
+	LaunchAlert = { Id = "rbxassetid://12221990", Volume = 1 }, -- electronicpingshort.wav. 선장 발사 임박 (세 번 연달아 울림)
+}
+
+-- 엔진음: 비행 내내 반복해서 깔리는 소리 세 겹. 계산은 EngineMix.luau, 소리 내기는 클라이언트 Sfx.luau.
+-- 굉음은 비행 구간(최대 출력·구원 연료 > 순항 > 솔라 세일 > 관성)의 추력만큼 커지고, 웅웅 소리는 추력이 없어도
+-- 조금은 늘 남아서 비행 중에는 엔진 소리가 끊기지 않습니다. 바람 소리는 대기권 안에서 빠를수록 커집니다.
+-- 엔진 소리 두 개는 크리에이터 스토어의 Pro Sound Effects 효과음(Roblox 가 라이선스한 무료 소리, 어느 게임에서나 씀)입니다.
+-- 크기(Volume)는 소리를 들어 보지 않고 잡은 임시 값입니다. 크거나 작으면 이 표의 Volume 만 고치면 됩니다.
+Config.EngineSound = {
+	-- Spaceship Interior Rocket Engine Constant 2: 우주선 안에서 듣는 로켓 엔진, 먹먹한 천둥 같은 굉음과 탁탁 튀는 소리 (63초)
+	Roar = { Id = "rbxassetid://9119413402", Volume = 0.6 },
+	-- 같은 묶음의 먹먹한 굉음 (66초)
+	Hum = { Id = "rbxassetid://9119413760", Volume = 0.4 },
+	-- 기본 내장 낙하 바람 소리 (설치본에 있음)
+	Wind = { Id = "rbxasset://sounds/action_falling.ogg", Volume = 0.35 },
+	-- 엔진 소리 에셋을 못 불러오면 대신 쓰는 기본 내장 소리. FallbackPitch 배로 낮춰 굉음처럼 들리게 함
+	Fallback = "rbxasset://sounds/action_falling.ogg",
+	FallbackPitch = 0.45,
+	-- 비행 구간(FlightSim.phaseAt)별 추력 (0~1). 굉음 크기 비율이 됨
+	Thrust = { rescue = 1, hot = 1, cruise = 0.6, sail = 0.25, coast = 0.1 },
+	HumFloor = 0.4, -- 추력이 0이어도 남는 웅웅 소리 비율 (추력 1이면 1)
+	TurboThrust = 0.35, -- 터보 엔진이 켜져 있는 동안 추력에 더함 (굉음이 더 커짐)
+	TurboPitch = 0.1, -- 터보 엔진이 켜져 있는 동안 높이 +
+	RoarPitchLow = 0.8, -- 추력 0일 때 굉음 높이 (추력 1이면 1)
+	HumPitchLow = 0.75, -- 추력 0일 때 웅웅 소리 높이
+	SpeedPitch = 0.12, -- 빠를수록 높이 + (10 m/s 에서 1만 m/s 까지 로그로 0~이 값)
+	SpoolPitch = 0.6, -- 발사 순간의 높이. SpoolSeconds 동안 1까지 오름 (엔진이 힘을 받는 소리)
+	SpoolSeconds = 1.5,
+	LaunchSurge = 0.4, -- 발사 직후 크기 +40%, SurgeSeconds 동안 줄어듦
+	SurgeSeconds = 4,
+	PreIgniteSeconds = 3, -- 카운트다운 마지막 이 초 동안 웅웅 소리가 낮게 차오름 (0 이면 끔)
+	PreIgniteLevel = 0.5,
+	KickVolume = 0.3, -- 미션 성공·부스터를 쓴 순간 굉음 크기 +
+	KickPitch = 0.08, -- 그때 높이 +
+	KickSeconds = 1.5, -- 그 효과가 사라지는 시간(초)
+	WindStartSpeed = 20, -- 바람 소리가 나기 시작하는 속도 (m/s)
+	WindFullSpeed = 300, -- 바람 소리가 가장 큰 속도 (m/s)
+	WindPitchLow = 0.8,
+	WindPitchHigh = 1.3,
+	Attack = 6, -- 커질 때 따라가는 빠르기 (초당)
+	Release = 2.5, -- 작아질 때 따라가는 빠르기
+	CaughtRelease = 10, -- 충격파에 잡혔을 때 엔진이 끊기는 빠르기
+	PitchRate = 3, -- 높이가 따라가는 빠르기
+	MaxLevel = 1.6, -- 크기 비율 상한
 }
 
 -- 디버그 패널을 쓸 수 있는 사람
