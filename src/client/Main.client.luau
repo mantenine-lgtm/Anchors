@@ -16,7 +16,7 @@ ReplicatedStorage:WaitForChild(Net.StateName)
 
 local State = require(script.Parent:WaitForChild("State"))
 
-local MODULE_NAMES = { "Sfx", "Hud", "BuildUi", "CaptainAlert", "MissionUi", "BoosterMenu", "Board", "PartsBoard", "MyParts", "CameraRig", "Planet", "Backdrop", "Exhaust", "DebugPanel" }
+local MODULE_NAMES = { "Sfx", "Hud", "BuildUi", "CaptainAlert", "MissionUi", "BoosterMenu", "Board", "PartsBoard", "MyParts", "CameraRig", "Planet", "PlanetSlot", "Backdrop", "Exhaust", "DebugPanel" }
 
 type Entry = { name: string, module: any, warned: boolean }
 local entries: { Entry } = {}
