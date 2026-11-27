@@ -90,7 +90,8 @@ ROFLY(로블록스FLY) 게임 저장소. [Rojo](https://rojo.space)로 VS Code�
 6. 휴대폰 화면은 Studio `Test › Device`에서 기기를 골라 확인합니다.
 7. 수치는 모두 `src/shared/Config.luau` 한 파일에 있습니다. 고치고 저장하면 다음 ▶ Play부터 반영됩니다.
 8. 소리: 비행 중에는 엔진음이 계속 나고, 비행 구간(최대 출력 > 순항 > 세일 > 관성)과 터보 엔진에 따라 크기가 바뀝니다. 대기권 안에서는 바람 소리도 납니다.
-   소리는 크리에이터 스토어의 무료 에셋(Roblox·Pro Sound Effects)이고, 크기는 `Config.EngineSound`·`Config.Sounds`의 `Volume`으로 맞춥니다.
+   엔진음과 주요 효과음(발사·충격파·카운트다운·미션 성공·콤보·부스터)은 ElevenLabs로 만들어 Nick 계정으로 올린 소리이고, 나머지는 Roblox가 올려 둔 무료 에셋입니다.
+   크기는 `Config.EngineSound`·`Config.Sounds`의 `Volume`으로 맞춥니다.
    소리를 못 불러오면 Output에 `[ROFLY] 소리를 불러오지 못함` 경고가 뜹니다.
 
 ## 매일 작업

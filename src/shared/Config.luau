@@ -264,21 +264,24 @@ Config.World = {
 	StudsPerMeter = 3.57,
 }
 
--- 소리 (임시 효과음. 나중에 바꾸려면 Id 만 고치면 됨)
--- Roblox 기본 내장 소리 파일(rbxasset://sounds/...)은 지금 설치본에 11개만 남아 있습니다
--- (2026-11 맥 Studio 설치 폴더 content/sounds 에서 확인: action_falling.ogg, impact_explosion_03.mp3 등).
--- 예전 파일(Rocket shot.wav, victory.wav 등)은 없어서 그 경로로는 소리가 나지 않으므로, Roblox 가 같은 소리를
--- 공개 에셋으로 올려 둔 것(크리에이터 스토어, 만든 이 @Roblox, 설명이 \sounds\<파일 이름>)의 에셋 ID 를 씁니다.
+-- 소리. 나중에 바꾸려면 Id 만 고치면 됨
+-- ROFLY_ 로 표시한 소리(와 아래 엔진음)는 ElevenLabs 로 만들어(tools/sfx) Nick 의 계정으로 Roblox 에 올린 소리입니다.
+-- 이 게임에서만 쓰고, 소리 파일은 저장소에 올리지 않습니다 (ElevenLabs 약관). 크기를 같은 기준으로 맞춰 두었으므로
+-- 소리끼리의 크기 균형은 Volume 만으로 정합니다 (자주 나는 소리는 작게, 발사·충격파처럼 가끔 오는 큰 순간은 크게).
+-- 나머지는 Roblox 가 예전 기본 소리 파일을 공개 에셋으로 올려 둔 것(크리에이터 스토어, 만든 이 @Roblox,
+-- 설명이 \sounds\<파일 이름>)입니다. 기본 내장 소리 파일(rbxasset://sounds/...)은 지금 설치본에 11개만 남아 있어
+-- (2026-11 맥 Studio 설치 폴더 content/sounds 에서 확인: action_falling.ogg, impact_explosion_03.mp3 등)
+-- 예전 경로(Rocket shot.wav, victory.wav 등)로는 소리가 나지 않습니다.
 Config.Sounds = {
-	Countdown = { Id = "rbxassetid://12221990", Volume = 0.6 }, -- electronicpingshort.wav
-	Launch = { Id = "rbxassetid://12222084", Volume = 0.9 }, -- Rocket shot.wav
-	MissionSuccess = { Id = "rbxassetid://12222253", Volume = 0.35 }, -- victory.wav
-	Combo = { Id = "rbxassetid://12221944", Volume = 0.6 }, -- bass.wav
+	Countdown = { Id = "rbxassetid://118533434533356", Volume = 0.6 }, -- ROFLY_Countdown: 짧고 맑은 전자음 삑
+	Launch = { Id = "rbxassetid://113747078016963", Volume = 0.9 }, -- ROFLY_Launch: 점화 폭발음이 굉음으로 올라감
+	MissionSuccess = { Id = "rbxassetid://130117785829325", Volume = 0.5 }, -- ROFLY_MissionSuccess: 짧고 밝은 성공 차임
+	Combo = { Id = "rbxassetid://135098826380564", Volume = 0.6 }, -- ROFLY_Combo: 올라가는 콤보 차임
 	CrisisAlarm = { Id = "rbxassetid://12221990", Volume = 0.8 }, -- electronicpingshort.wav
-	ItemUse = { Id = "rbxassetid://12222095", Volume = 0.9 }, -- Rocket whoosh 01.wav
+	ItemUse = { Id = "rbxassetid://121597781056017", Volume = 0.8 }, -- ROFLY_ItemUse: 에너지가 차오르는 부스터 소리
 	Press = { Id = "rbxassetid://12221976", Volume = 0.5 }, -- clickfast.wav
 	Wrong = { Id = "rbxassetid://12222242", Volume = 0.25 }, -- uuhhh.wav
-	Caught = { Id = "rbxasset://sounds/impact_explosion_03.mp3", Volume = 0.9 }, -- 기본 내장 (설치본에 있음)
+	Caught = { Id = "rbxassetid://140326844031753", Volume = 0.9 }, -- ROFLY_Caught: 충격파가 덮치는 큰 폭발음
 	Thunder = { Id = "rbxassetid://12222030", Volume = 0.25 }, -- HalloweenThunder.wav
 	Thanks = { Id = "rbxassetid://12222170", Volume = 0.5 }, -- switch.wav
 	PartPlace = { Id = "rbxassetid://12221976", Volume = 0.8 }, -- clickfast.wav. 내 부품을 꽂음
@@ -288,15 +291,14 @@ Config.Sounds = {
 -- 엔진음: 비행 내내 반복해서 깔리는 소리 세 겹. 계산은 EngineMix.luau, 소리 내기는 클라이언트 Sfx.luau.
 -- 굉음은 비행 구간(최대 출력·구원 연료 > 순항 > 솔라 세일 > 관성)의 추력만큼 커지고, 웅웅 소리는 추력이 없어도
 -- 조금은 늘 남아서 비행 중에는 엔진 소리가 끊기지 않습니다. 바람 소리는 대기권 안에서 빠를수록 커집니다.
--- 엔진 소리는 지금 크리에이터 스토어의 Pro Sound Effects 효과음(Roblox 가 라이선스한 무료 소리, 어느 게임에서나 씀)을
--- 임시로 씁니다. ElevenLabs 로 만든 엔진 소리(tools/sfx)를 Roblox 에 올리면 그 에셋 ID 로 바꿉니다.
--- 크기(Volume)는 소리를 들어 보지 않고 잡은 임시 값입니다. 크거나 작으면 이 표의 Volume 만 고치면 됩니다.
+-- 엔진 소리는 ElevenLabs 로 만든 7.6초 반복 소리(ROFLY_Engine, 선실 안에서 듣는 로켓 엔진)입니다. 노트북·폰 스피커에서도
+-- 들리도록 저음의 배음을 중음에 더해 두었습니다(tools/sfx/process.py 의 smallSpeaker).
+-- 크기(Volume)는 게임 안에서 들어 보지 않고 잡은 값입니다. 크거나 작으면 이 표의 Volume 만 고치면 됩니다.
 Config.EngineSound = {
 	-- 엔진 소리 하나를 굉음·웅웅 두 겹이 같이 씀 (용량을 줄이려고). 웅웅 소리는 Pitch 배로 낮게,
 	-- 소리 길이의 Offset 비율만큼 어긋난 자리부터 틀어서 굉음과 다른 겹으로 들림
-	-- (임시: Spaceship Interior Rocket Engine Constant 2, 우주선 안에서 듣는 로켓 엔진 63초)
-	Roar = { Id = "rbxassetid://9119413402", Volume = 0.6 },
-	Hum = { Id = "rbxassetid://9119413402", Volume = 0.4, Pitch = 0.75, Offset = 0.5 },
+	Roar = { Id = "rbxassetid://139640557468504", Volume = 0.6 },
+	Hum = { Id = "rbxassetid://139640557468504", Volume = 0.4, Pitch = 0.75, Offset = 0.5 },
 	-- 기본 내장 낙하 바람 소리 (설치본에 있음)
 	Wind = { Id = "rbxasset://sounds/action_falling.ogg", Volume = 0.35 },
 	-- 엔진 소리 에셋을 못 불러오면 대신 쓰는 기본 내장 소리. FallbackPitch 배로 낮춰 굉음처럼 들리게 함
