@@ -450,6 +450,16 @@ function CameraRig.update(dt: number)
 		local roll = math.noise(t, 21.4) * 0.03 * strength
 		cframe = cframe * CFrame.Angles(pitch, yaw, roll)
 	end
+	-- 대기권 마찰 흔들림: 뜨거울수록 크게 (선실·바깥 시점 모두). 대기권을 벗어나면 멈춤.
+	local heat = State.heat
+	if heat > 0.001 then
+		local t = clock * 23
+		local angle = math.rad(Config.Atmosphere.ShakeDeg) * heat
+		local move = Config.Atmosphere.ShakeStuds * heat
+		cframe = cframe
+			* CFrame.new(math.noise(t, 31.7) * 2 * move, math.noise(t, 47.3) * 2 * move, 0)
+			* CFrame.Angles(math.noise(t, 5.3) * 2 * angle, math.noise(t, 13.9) * 2 * angle, math.noise(t, 61.1) * angle)
+	end
 	camera.CFrame = cframe
 	-- 연출 카메라에서는 엔진이 초점(Focus)을 옮겨 주지 않음. 선실 조명이 제대로 그려지게 선실로 맞춤.
 	camera.Focus = CFrame.new(0, W.CabinFloorY + 11, 0)

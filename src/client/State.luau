@@ -10,6 +10,7 @@ local Workspace = game:GetService("Workspace")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared:WaitForChild("Config"))
 local Net = require(Shared:WaitForChild("Net"))
+local Route = require(Shared:WaitForChild("Route"))
 
 local State = {}
 
@@ -146,7 +147,7 @@ State.flight = {
 	t = 0,
 }
 
-function State.update(dt: number)
+local function updateFlight(dt: number)
 	local f = State.flight
 	if State.phase() ~= "Flight" then
 		f.km = State.number("Km")
@@ -174,6 +175,17 @@ function State.update(dt: number)
 		f.waveKm += (serverWave - f.waveKm) * pull
 		f.t += (serverT - f.t) * pull
 	end
+end
+
+-- 대기권 마찰 열(0~1). 화면 흔들림(CameraRig)과 선체가 달아오르는 연출(Backdrop)이 같이 씁니다.
+-- 비행이 아니면 식습니다.
+State.heat = 0
+
+function State.update(dt: number)
+	updateFlight(dt)
+	local f = State.flight
+	local target = if State.phase() == "Flight" then Route.heat(f.km, f.speed) else 0
+	State.heat += (target - State.heat) * math.min(1, dt * 1.5)
 end
 
 -- ------------------------------------------------------------ 화면 모듈끼리의 알림

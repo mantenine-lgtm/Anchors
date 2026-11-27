@@ -59,6 +59,25 @@ function Route.chapterName(index: number): string
 	return chapters[i].Name
 end
 
+-- 대기권(첫 챕터)이 끝나는 거리(km). 여기를 넘으면 '대기권 돌파'
+function Route.atmosphereEndKm(): number
+	return chapters[1].EndKm
+end
+
+-- 대기권 마찰로 달아오르는 정도(0~1). 빠를수록 세지고, 대기권 끝에 가까워지면 공기가 옅어져 줄다가
+-- 대기권을 벗어나면 0. speedKmPerSecond 는 km/s.
+function Route.heat(km: number, speedKmPerSecond: number): number
+	local A = Config.Atmosphere
+	local endKm = chapters[1].EndKm
+	if km >= endKm then
+		return 0
+	end
+	local metersPerSecond = speedKmPerSecond * 1000
+	local fast = math.clamp((metersPerSecond - A.HeatStartSpeed) / (A.HeatFullSpeed - A.HeatStartSpeed), 0, 1)
+	local air = math.clamp((endKm - km) / (endKm - A.ThinAirKm), 0, 1)
+	return fast * air
+end
+
 -- 스테이지 번호, 그 스테이지 안에서의 진행(0~1), 다음 스테이지까지 남은 km
 function Route.progress(km: number): (number, number, number)
 	local index = Route.stageIndex(km)
