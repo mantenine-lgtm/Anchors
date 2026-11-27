@@ -15,6 +15,7 @@ local Parts = require(Shared:WaitForChild("Parts"))
 local Route = require(Shared:WaitForChild("Route"))
 local Scoring = require(Shared:WaitForChild("Scoring"))
 
+local Assembly = require(script.Parent.Assembly)
 local Bots = require(script.Parent.Bots)
 local Metrics = require(script.Parent.Metrics)
 local Seating = require(script.Parent.Seating)
@@ -244,6 +245,54 @@ local function pickCaptain(crew: { Member }): Member?
 	return candidates[pick(#candidates)]
 end
 
+-- 조립 중 수치: 꽂힌 부품만으로 종류별 합계와 예상 거리를 계산해 알림 (기획서 '장착 연출': 꽂으면 예상 거리가 오름).
+-- 꽂힌 부품이 바뀌었을 때만, RecalcInterval 보다 자주는 하지 않음 (force 면 바로).
+local function refreshAssembly(round: any, force: boolean)
+	local session = round.assembly
+	if not force and (not session.dirty or now() - round.lastRecalc < Config.Build.RecalcInterval) then
+		return
+	end
+	session.dirty = false
+	round.lastRecalc = now()
+	local totals = Parts.totals(Assembly.loadouts(session))
+	round.totals = totals
+	round.expectedKm = FlightSim.predict(totals, 0, Config.Rewards.ExpectedRate)
+	state:SetAttribute("ExpectedKm", round.expectedKm)
+	showBuild(totals :: any, round.gearName)
+end
+
+-- 조립 시간: 사람은 조립 화면에서(PlacePart), 봇은 시간을 두고 하나씩 꽂음. 탄 사람이 모두 다 꽂으면 BuildAllPlaced 초만
+-- 더 기다리고(그동안 남은 봇 부품도 서둘러 꽂음), 시간이 끝나면 못 꽂은 부품을 빈 칸에 자동으로 꽂습니다.
+local function runAssembly(round: any)
+	local session = round.assembly
+	local endsAt = now() + Config.Phase.Build
+	local hurried = false
+	while now() < endsAt do
+		if consumeSkip() then
+			state:SetAttribute("PhaseEndsAt", now())
+			break
+		end
+		Assembly.runBots(session, now())
+		if not hurried and Assembly.allHumansDone(session) then
+			hurried = true
+			if endsAt - now() > Config.Phase.BuildAllPlaced then
+				endsAt = now() + Config.Phase.BuildAllPlaced
+				state:SetAttribute("PhaseEndsAt", endsAt)
+			end
+			Assembly.hurryBots(session, now(), endsAt - Config.Build.BotHurryMargin)
+		end
+		refreshAssembly(round, false)
+		task.wait(0.1)
+	end
+	for member, count in pairs(Assembly.finish(session)) do
+		local player = member.player
+		if player and player.Parent == Players then
+			Net.event("Announce"):FireClient(player, string.format("못 꽂은 부품 %d개를 빈 칸에 자동으로 꽂았습니다", count))
+		end
+	end
+	refreshAssembly(round, true)
+end
+
 local function runBuild(joined: { Player }): any
 	local crew: { Member } = {}
 	local byPlayer: { [Player]: Member } = {}
@@ -297,31 +346,28 @@ local function runBuild(joined: { Player }): any
 		end
 	end
 
-	-- 부품 합계와 예상 거리
-	local loadouts = {}
-	for _, member in ipairs(crew) do
-		table.insert(loadouts, member.loadout)
-	end
-	local totals = Parts.totals(loadouts)
-	local expectedKm = FlightSim.predict(totals, 0, Config.Rewards.ExpectedRate)
+	-- 부품 조립: 종류마다 그리드를 열고, 꽂힌 부품만으로 합계와 예상 거리를 셈 (처음에는 아무것도 안 꽂힘)
+	local preset = Parts.preset(options.gear)
+	local assembly = Assembly.begin(state, roundNumber, crew, preset.Rarity, preset.Level, rng, now())
 
 	state:SetAttribute("Round", roundNumber)
 	state:SetAttribute("CrewCount", #crew)
 	state:SetAttribute("CaptainUserId", if captain then captain.userId else 0)
 	state:SetAttribute("CaptainName", if captain then captain.name else "")
 	state:SetAttribute("CaptainSeat", if captain then captain.seat else 0)
-	state:SetAttribute("ExpectedKm", expectedKm)
 	state:SetAttribute("BestKm", bestKm)
 	resetFlightState()
-	showBuild(totals :: any, Parts.preset(options.gear).Name)
 
 	local round = {
 		number = roundNumber,
 		crew = crew,
 		byPlayer = byPlayer,
 		captain = captain,
-		totals = totals,
-		expectedKm = expectedKm,
+		totals = nil, -- 조립이 끝나면 꽂힌 부품 전체의 종류별 합계 (refreshAssembly)
+		expectedKm = 0,
+		assembly = assembly,
+		gearName = preset.Name,
+		lastRecalc = 0,
 		launchPress = nil,
 		launchQuality = "auto",
 		captainBonus = 0,
@@ -337,9 +383,10 @@ local function runBuild(joined: { Player }): any
 		ended = false,
 		fastForward = false, -- 디버그: 위기 구간 직전으로 건너뛰기
 	}
+	refreshAssembly(round, true)
 	current = round
 	setPhase("Build", Config.Phase.Build)
-	waitPhase(Config.Phase.Build)
+	runAssembly(round)
 	return round
 end
 
@@ -829,6 +876,7 @@ local function cleanup()
 	current = nil
 	Bots.clear()
 	World.clearSeats()
+	Assembly.clear(state)
 	showBuild(nil, "")
 	state:SetAttribute("CrewCount", 0)
 	state:SetAttribute("CaptainUserId", 0)
@@ -931,6 +979,29 @@ local function connectRemotes()
 		mission.touched[member.id] = true
 		if kind == "done" and mission.done[member.id] ~= true and Missions.check(mission.sequence, inputs) then
 			mission.done[member.id] = true
+		end
+	end)
+
+	-- 조립 화면에서 칸을 누름 / 남은 부품 자동으로 꽂기 (조립 단계에서 탄 사람만)
+	Net.event("PlacePart").OnServerEvent:Connect(function(player: Player, typeId: any, cell: any)
+		local round = current
+		if round == nil or round.assembly == nil or state:GetAttribute("Phase") ~= "Build" then
+			return
+		end
+		local member = round.byPlayer[player]
+		if member then
+			Assembly.place(round.assembly, member, typeId, cell)
+		end
+	end)
+
+	Net.event("AutoPlace").OnServerEvent:Connect(function(player: Player)
+		local round = current
+		if round == nil or round.assembly == nil or state:GetAttribute("Phase") ~= "Build" then
+			return
+		end
+		local member = round.byPlayer[player]
+		if member then
+			Assembly.autoPlace(round.assembly, member)
 		end
 	end)
 

@@ -24,6 +24,8 @@ Net.Events = {
 	"Results", -- 서버 -> 클라: 정산 내용
 	"Announce", -- 서버 -> 클라: 한 줄 안내
 	"Debug", -- 클라 -> 서버: 디버그 명령
+	"PlacePart", -- 클라 -> 서버: 조립 화면에서 부품 꽂기 (종류 Id, 칸 번호). 이미 꽂은 종류면 그 칸으로 옮김
+	"AutoPlace", -- 클라 -> 서버: 조립 화면의 '남은 부품 자동으로 꽂기'
 }
 
 local cache: { [string]: RemoteEvent } = {}
