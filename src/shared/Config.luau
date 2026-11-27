@@ -237,9 +237,13 @@ Config.CoinFx = {
 	MaxSprites = 80, -- 화면에 한꺼번에 날아다니는 코인 수 한도
 	MaxPerBurst = 30, -- 한 무더기에 날리는 코인 수 한도 (가장 화려할 때)
 	DistanceMaxSprites = 4, -- 거리 코인 한 번에 날리는 코인 수 한도 (작은 효과로 유지)
-	-- 임시 소리: Roblox 내장 소리 중 짧은 '팅' 소리를 빠르게 재생해 코인 소리로 씀. 나중에 크리에이터 스토어 소리로 교체
-	SoundId = "rbxasset://sounds/volume_slider.ogg",
-	SoundVolume = 0.3, -- 가장 작은 효과일 때. 클수록 0.3 더 커짐
+	-- 코인 소리: ROFLY_Coin (ElevenLabs 로 만든 0.31초 밝은 코인 차임, Nick 계정으로 Roblox 에 올림).
+	-- ElevenLabs 약관 때문에 소리 파일은 저장소에 두지 않고 에셋 ID 만 씀
+	SoundId = "rbxassetid://93440520253528",
+	SoundVolume = 0.3, -- 가장 작은 효과일 때. 클수록 0.3 더 커짐 (Studio 에서 들어 보고 맞추기)
+	SoundSpeedMin = 1.0, -- 작은 코인의 재생 속도 (1.0~1.1). 빠르게 틀수록 날카롭고 짧아짐
+	SoundSpeedMax = 1.3, -- 큰 무더기의 뒤쪽 코인도 이만큼까지만 높게
+	SoundAccentSpeed = 0.85, -- 큰 무더기가 처음 닿을 때 한 번 더 내는 낮고 굵은 소리
 	SoundGap = 0.045, -- 코인 소리 사이의 최소 간격(초). 많이 들어올 때 소리가 뭉개지지 않게
 }
 
