@@ -3,6 +3,9 @@
 -- RoundState 의 Planet(행성 Id)·PlanetSeed(배치 씨앗) 속성으로 알립니다.
 -- 클라이언트 Planet.luau 가 이 값으로 둥근 행성과 주변 지형지물을 만들고, Backdrop 이 Sky 를 1단계 하늘로 씁니다.
 -- 행성을 하나 더 넣으려면 아래 목록에 항목을 하나 더 쓰면 됩니다. (지형지물·소품 종류는 Planet.luau 의 BUILDERS 이름)
+-- 다음 판 행성은 정산 때 슬롯(PlanetSlot.luau)으로 뽑습니다: 지금 행성을 뺀 나머지에서 Weight(가중치) 비율대로.
+-- 가중치는 임시 값입니다 (6종 합 100: 정글·사막·바다 22, 얼음 16, 용암 12, 수정 6 = 희귀).
+-- 슬롯 칸의 그림은 Thumb (Roblox 이미지 에셋, 원본은 저장소 docs/planets/). 비어 있으면 행성 색으로 그린 둥근 그림을 씁니다.
 
 local Planets = {}
 
@@ -42,6 +45,8 @@ export type Planet = {
 	Props: { Prop }, -- 발사대 근처 소품
 	Bodies: { Body }, -- 하늘의 천체
 	Sky: Sky,
+	Weight: number, -- 다음 행성 뽑기 가중치 (클수록 잘 나옴)
+	Thumb: string, -- 슬롯 썸네일 이미지 ("rbxassetid://숫자", 아직 없으면 "")
 }
 
 local function rgb(r: number, g: number, b: number): Color3
@@ -52,6 +57,8 @@ local LIST: { Planet } = {
 	{
 		Id = "lava",
 		Name = "용암 행성",
+		Weight = 12,
+		Thumb = "",
 		Ground = { rgb(56, 42, 40), rgb(72, 50, 44), rgb(90, 60, 50) },
 		GroundMaterial = Enum.Material.Basalt,
 		Sea = rgb(255, 110, 30),
@@ -82,6 +89,8 @@ local LIST: { Planet } = {
 	{
 		Id = "ice",
 		Name = "얼음 행성",
+		Weight = 16,
+		Thumb = "",
 		Ground = { rgb(198, 218, 234), rgb(220, 234, 246), rgb(238, 246, 255) },
 		GroundMaterial = Enum.Material.Snow,
 		Sea = rgb(120, 188, 236),
@@ -112,6 +121,8 @@ local LIST: { Planet } = {
 	{
 		Id = "jungle",
 		Name = "정글 행성",
+		Weight = 22,
+		Thumb = "",
 		Ground = { rgb(58, 128, 60), rgb(76, 148, 66), rgb(96, 166, 72) },
 		GroundMaterial = Enum.Material.Grass,
 		Sea = rgb(48, 140, 200),
@@ -145,6 +156,8 @@ local LIST: { Planet } = {
 	{
 		Id = "desert",
 		Name = "사막 행성",
+		Weight = 22,
+		Thumb = "",
 		Ground = { rgb(212, 158, 98), rgb(226, 178, 112), rgb(236, 196, 128) },
 		GroundMaterial = Enum.Material.Sand,
 		Sea = rgb(238, 224, 198),
@@ -176,6 +189,8 @@ local LIST: { Planet } = {
 	{
 		Id = "crystal",
 		Name = "수정 행성",
+		Weight = 6,
+		Thumb = "",
 		Ground = { rgb(68, 48, 98), rgb(86, 60, 118), rgb(104, 74, 138) },
 		GroundMaterial = Enum.Material.Slate,
 		Sea = rgb(128, 88, 208),
@@ -206,6 +221,8 @@ local LIST: { Planet } = {
 	{
 		Id = "ocean",
 		Name = "바다 행성",
+		Weight = 22,
+		Thumb = "",
 		Ground = { rgb(226, 210, 150), rgb(120, 180, 90), rgb(92, 150, 72) },
 		GroundMaterial = Enum.Material.Grass,
 		Sea = rgb(40, 130, 210),
@@ -261,18 +278,41 @@ function Planets.has(id: string): boolean
 	return false
 end
 
--- 다음 판 행성: 지금 행성(currentId)과 다른 것 가운데 무작위
-function Planets.pick(currentId: string, rng: Random): Planet
+export type Odds = { Planet: Planet, Chance: number }
+
+-- 다음 판 행성 후보와 확률 (0~1): 지금 행성(currentId)을 뺀 나머지, 목록 순서. 확률 = 가중치 / 후보 가중치 합.
+-- 슬롯 화면의 확률 표기와 서버의 뽑기가 같은 표를 씁니다.
+function Planets.odds(currentId: string): { Odds }
 	local choices: { Planet } = {}
+	local total = 0
 	for _, planet in ipairs(LIST) do
-		if planet.Id ~= currentId then
+		if planet.Id ~= currentId and planet.Weight > 0 then
 			table.insert(choices, planet)
+			total += planet.Weight
 		end
 	end
-	if #choices == 0 then
+	local out: { Odds } = {}
+	for _, planet in ipairs(choices) do
+		table.insert(out, { Planet = planet, Chance = planet.Weight / total })
+	end
+	return out
+end
+
+-- 다음 판 행성: 지금 행성(currentId)과 다른 것 가운데 가중치 비율대로 하나
+function Planets.pick(currentId: string, rng: Random): Planet
+	local odds = Planets.odds(currentId)
+	if #odds == 0 then
 		return LIST[1]
 	end
-	return choices[rng:NextInteger(1, #choices)]
+	local roll = rng:NextNumber()
+	local sum = 0
+	for _, entry in ipairs(odds) do
+		sum += entry.Chance
+		if roll < sum then
+			return entry.Planet
+		end
+	end
+	return odds[#odds].Planet
 end
 
 -- 목록 순서대로 다음 행성 (디버그 패널에서 하나씩 넘겨 볼 때)

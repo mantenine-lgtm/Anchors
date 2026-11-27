@@ -107,6 +107,31 @@ local function currentPlanetId(): string
 	return if typeof(id) == "string" then id else ""
 end
 
+-- 다음 행성 슬롯: 정산을 시작할 때 다음 판 행성을 미리 뽑고, 슬롯이 돌기 시작하는 시각·멈추는 시각을 알림.
+-- 화면(PlanetSlot.luau)은 SlotFrom(뺀 행성 = 지금 행성)으로 확률표를 만들고, SlotSeed 로 칸 순서를 섞어
+-- 모든 사람이 같은 슬롯을 보다가 SlotStopAt 에 NextPlanet 에서 멈춥니다. 바뀌는 것은 판이 끝날 때(cleanup)입니다.
+-- 쓰는 순서: 행성·씨앗을 먼저, 시작 시각(SlotStartAt)을 맨 나중에 (화면은 시작 시각이 오면 나머지를 읽음)
+local function rollNextPlanet(resultsSeconds: number)
+	local from = currentPlanetId()
+	local planet = Planets.pick(from, planetRng)
+	local spin = Config.PlanetSlot.Spin
+	local startAfter = math.clamp(Config.PlanetSlot.StartAfter, 0, math.max(0, resultsSeconds - spin - 1))
+	local startAt = now() + startAfter
+	state:SetAttribute("NextPlanet", planet.Id)
+	state:SetAttribute("SlotFrom", from)
+	state:SetAttribute("SlotSeed", planetRng:NextInteger(1, 999999))
+	state:SetAttribute("SlotStopAt", startAt + spin)
+	state:SetAttribute("SlotStartAt", startAt)
+end
+
+local function clearSlot()
+	state:SetAttribute("SlotStartAt", 0)
+	state:SetAttribute("SlotStopAt", 0)
+	state:SetAttribute("NextPlanet", "")
+	state:SetAttribute("SlotFrom", "")
+	state:SetAttribute("SlotSeed", 0)
+end
+
 local function consumeSkip(): boolean
 	if skipRequested then
 		skipRequested = false
@@ -991,6 +1016,7 @@ local function runResults(round: any)
 	lastKingUserId = if kingId then memberById[kingId].userId else 0
 	lastCaptainUserId = if round.captain then round.captain.userId else 0
 
+	rollNextPlanet(Config.Phase.Results)
 	setPhase("Results", Config.Phase.Results)
 	waitPhase(Config.Phase.Results)
 end
@@ -1008,8 +1034,17 @@ local function cleanup()
 	state:SetAttribute("CaptainSeat", 0)
 	resetFlightState()
 	Seating.releaseAll()
-	-- 다음 판은 다른 행성에서 (모두 발사장으로 돌아간 뒤에 바꿈)
-	setPlanet(Planets.pick(currentPlanetId(), planetRng))
+	-- 다음 판은 정산 때 슬롯으로 뽑은 행성에서 (모두 발사장으로 돌아간 뒤에 바꿈).
+	-- 비행 전에 끝난 판(아무도 안 탐)은 슬롯이 없었으므로 행성을 그대로 둠.
+	local nextId = state:GetAttribute("NextPlanet")
+	if typeof(nextId) == "string" and nextId ~= "" then
+		local planet = Planets.get(nextId)
+		if planet.Id == currentPlanetId() then
+			planet = Planets.pick(currentPlanetId(), planetRng) -- 그사이 디버그로 같은 행성이 됐으면 다시 뽑음
+		end
+		setPlanet(planet)
+	end
+	clearSlot()
 end
 
 local function runRound()
@@ -1188,6 +1223,7 @@ function Round.start()
 	resetFlightState()
 	showOptions()
 	setPlanet(Planets.pick("", planetRng))
+	clearSlot()
 	state.Parent = ReplicatedStorage
 
 	connectRemotes()
