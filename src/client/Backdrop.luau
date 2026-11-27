@@ -6,6 +6,7 @@
 --  · 별빛 줄기: 대기권을 벗어난 뒤에만, 속도가 빠를수록 빠르게 아래로 흐름 (발사 전에는 천천히 떠오르는 불티)
 --  · 하늘: 스테이지마다 빛과 안개 색이 바뀜, 폭풍 구름층에서는 번개
 --  · 위기: 경보등이 깜박이고 화면이 붉어짐
+--  · 엔진 불꽃과 추진운은 Exhaust.luau
 -- 전부 내 화면에서만 바꾸는 것이라 다른 사람에게 영향이 없습니다.
 
 local Lighting = game:GetService("Lighting")
@@ -89,9 +90,9 @@ local SKIES: { Sky } = {
 local container: Folder
 
 local wave: Part
-local waveY = -440
-local flame: Part
-local flameLight: PointLight
+-- 멀리 있을 때의 충격파 높이: 바깥 시점 화면 아래 끝보다 낮아서 안 보임. 다가오면(도달 30초 이내) 올라와 보이기 시작
+local WAVE_FAR_Y = -1150
+local waveY = WAVE_FAR_Y
 
 type Streak = {
 	part: Part,
@@ -152,22 +153,6 @@ local function buildWave()
 	wave.Transparency = 1
 	wave.Size = Vector3.new(6, 2040, 2040)
 	wave.CFrame = CFrame.new(0, waveY, 0) * CFrame.Angles(0, 0, math.rad(90))
-end
-
-local function buildFlame()
-	flame = localPart("EngineFlame", container)
-	flame.Shape = Enum.PartType.Cylinder
-	flame.Material = Enum.Material.Neon
-	flame.Color = Color3.fromRGB(255, 190, 90)
-	flame.Transparency = 1
-	flame.Size = Vector3.new(60, 26, 26)
-	flame.CFrame = CFrame.new(0, W.MountHeight - 26, 0) * CFrame.Angles(0, 0, math.rad(90))
-	flameLight = Instance.new("PointLight")
-	flameLight.Color = Color3.fromRGB(255, 170, 90)
-	flameLight.Range = 60
-	flameLight.Brightness = 0
-	flameLight.Shadows = false
-	flameLight.Parent = flame
 end
 
 -- 로켓 둘레에 놓일 방향(각도)을 뽑음. 구름 공이나 빛줄기가 바깥 시점 카메라를 덮으면 화면이 갑자기
@@ -392,7 +377,6 @@ function Backdrop.init()
 
 	sky = table.clone(homeSky())
 	buildWave()
-	buildFlame()
 	buildStreaks()
 	task.spawn(findRocketParts)
 
@@ -541,27 +525,15 @@ function Backdrop.update(dt: number)
 		end
 	end
 
-	-- 엔진 불꽃
-	if flying then
-		local flicker = 0.85 + 0.3 * math.noise(clock * 14, 3.1)
-		local flameLength = 70 * flicker
-		flame.Transparency = 0.15
-		flame.Size = Vector3.new(flameLength, 24, 24)
-		flame.CFrame = CFrame.new(0, W.MountHeight + 4 - flameLength / 2, 0) * CFrame.Angles(0, 0, math.rad(90))
-		flameLight.Brightness = 3 * flicker
-	else
-		flame.Transparency = 1
-		flameLight.Brightness = 0
-	end
-
-	-- 충격파: 도달 예상 시간이 짧을수록 선실 바닥 가까이 올라옴
-	local targetY = -440
+	-- 충격파: 도달 예상 시간이 짧을수록 선실 바닥 가까이 올라옴.
+	-- 위기(10초 이내)에는 로켓 밑동 아래에서 선실 바닥까지(선실 외창에 보임), 그 전에는 바깥 시점 화면 아래 끝에서 로켓 밑동까지
+	local targetY = WAVE_FAR_Y
 	local waveVisible = false
 	if flying then
 		waveVisible = true
 		local eta = math.clamp(State.number("Eta"), 0, Config.Crisis.EtaLimit)
-		local below = if eta <= 10 then eta * 23.4 else 234 + (eta - 10) * 16.3
-		targetY = math.max(W.CabinFloorY - below, -440)
+		local below = if eta <= 10 then eta * 23.4 else 234 + (eta - 10) * 51.8
+		targetY = math.max(W.CabinFloorY - below, WAVE_FAR_Y)
 	elseif phase == "Results" and caughtAt > 0 then
 		-- 따라잡힘: 충격파가 선실을 덮고 지나감
 		waveVisible = true
@@ -573,7 +545,7 @@ function Backdrop.update(dt: number)
 		wave.Transparency = 0.12
 		wave.CFrame = CFrame.new(0, waveY, 0) * CFrame.Angles(0, 0, math.rad(90))
 	else
-		waveY = -440
+		waveY = WAVE_FAR_Y
 		wave.Transparency = 1
 	end
 end

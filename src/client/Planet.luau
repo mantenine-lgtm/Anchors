@@ -1018,9 +1018,10 @@ function Planet.placement(alpha: number, inside: boolean): (number, number)
 		end
 		return top - alpha, 0
 	end
-	-- 바깥 시점(화면 아래 끝 약 -26도): 크면 지평선을 -10도에, 작아지면 로켓과 화면 아래 미션 판에 덜 가리게 왼쪽 위(27도, -9도)로
+	-- 바깥 시점(화면 아래 끝 약 -38도, 로켓 밑동 -7도): 크면 지평선을 로켓 밑동 바로 아래(-10도)에, 작아지면 로켓·추진운과
+	-- 화면 아래 미션 판, 왼쪽 비행 정보 판에 덜 가리게 왼쪽 아래(27도, -14도)로
 	local t = smoothstep((alpha - 12) / 23)
-	return lerp(-9, -10 - alpha, t), lerp(27, 0, t)
+	return lerp(-14, -10 - alpha, t), lerp(27, 0, t)
 end
 
 -- 카메라 위치와 거리(km)로 행성의 자리를 계산: 행성 중심 위치, 회전, 크기 배율.

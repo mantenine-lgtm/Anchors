@@ -260,7 +260,7 @@ Config.World = {
 	SeatReclineDeg = 40, -- 의자가 뒤로 젖혀진 각도
 	SeatRootOffset = 1.9, -- 의자 판에서 캐릭터 중심까지 높이
 	SpawnDistance = 95, -- 로켓 중심에서 리스폰 지점까지
-	OutsideCamera = { 130, 90, 205 }, -- 바깥 시점 카메라 자리 (x, y, z)
+	OutsideCamera = { 241, 60, 380, 36 }, -- 바깥 시점 카메라 자리 (x, y, z)와 바라보는 로켓 축의 높이. 로켓과 그 아래 추진운이 함께 보이게 조금 멀리서
 	StudsPerMeter = 3.57,
 }
 
