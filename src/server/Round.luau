@@ -46,6 +46,7 @@ type Member = {
 }
 
 local rng = Random.new()
+local planetRng = Random.new() -- 행성 고르기 전용 (판 진행에 쓰는 rng 의 순서를 바꾸지 않게)
 local state: Folder
 local current: any = nil -- 진행 중인 판 (없으면 nil)
 local roundNumber = 0
@@ -91,7 +92,7 @@ end
 -- 클라이언트는 씨앗이 바뀌면 그때의 종류로 행성을 다시 만듭니다(씨앗이 같으면 모두 같은 행성).
 local function setPlanet(planet: Planets.Planet)
 	local previous = getNumber(state, "PlanetSeed")
-	local seed = rng:NextInteger(1, 999999)
+	local seed = planetRng:NextInteger(1, 999999)
 	if seed == previous then
 		seed = seed % 999999 + 1
 	end
@@ -855,7 +856,7 @@ local function cleanup()
 	resetFlightState()
 	Seating.releaseAll()
 	-- 다음 판은 다른 행성에서 (모두 발사장으로 돌아간 뒤에 바꿈)
-	setPlanet(Planets.pick(currentPlanetId(), rng))
+	setPlanet(Planets.pick(currentPlanetId(), planetRng))
 end
 
 local function runRound()
@@ -1006,7 +1007,7 @@ function Round.start()
 	showBuild(nil, "")
 	resetFlightState()
 	showOptions()
-	setPlanet(Planets.pick("", rng))
+	setPlanet(Planets.pick("", planetRng))
 	state.Parent = ReplicatedStorage
 
 	connectRemotes()
