@@ -6,6 +6,7 @@ local RunService = game:GetService("RunService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared:WaitForChild("Config"))
+local Fever = require(Shared:WaitForChild("Fever"))
 local Net = require(Shared:WaitForChild("Net"))
 
 local Metrics = require(script.Parent.Metrics)
@@ -56,6 +57,9 @@ local function handle(player: Player, command: any, value: any)
 	elseif command == "Gear" and typeof(value) == "string" then
 		Round.setGear(value)
 		reply(player, "다음 판부터 전원 장비가 바뀝니다")
+	elseif command == "Fever" and typeof(value) == "string" then
+		Round.setFever(value)
+		reply(player, "부품 피버: " .. Fever.modeName(value) .. " (다음 미션부터)")
 	elseif command == "BotRescue" then
 		if Round.botUseRescue() then
 			reply(player, "봇이 구원 연료를 썼습니다")
