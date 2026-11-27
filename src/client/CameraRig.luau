@@ -163,8 +163,9 @@ end
 
 -- ------------------------------------------------------------ 카메라 위치
 local function exteriorCFrame(): CFrame
+	-- 조금 멀리서 로켓 전체와 그 아래로 길게 흐르는 추진운이 함께 보이게 (자리와 바라보는 높이는 Config.World.OutsideCamera)
 	local at = W.OutsideCamera
-	return CFrame.lookAt(Vector3.new(at[1], at[2], at[3]), Vector3.new(0, 128, 0))
+	return CFrame.lookAt(Vector3.new(at[1], at[2], at[3]), Vector3.new(0, at[4], 0))
 end
 
 -- 발사장 리스폰 지점을 뒤에서 비추는 자리 (새 캐릭터가 나타났을 때 기본 카메라가 잡는 구도와 비슷하게)
