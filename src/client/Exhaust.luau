@@ -287,7 +287,12 @@ local function stepPuff(puff: Puff, dt: number, ageRate: number, ground: number)
 		puff.vx *= drag
 		puff.vz *= drag
 	end
-	-- 땅 밑으로는 들어가지 않고 옆으로 퍼짐 (발사 직후)
+	-- 로켓 밑동 위로는 올라가지 않음: 갓 나온 연기는 빠르게 부푸는데 아직 느리게 흐르므로, 위쪽은 불꽃 시작점에 맞추고 아래로 부풂
+	local highest = NOZZLE_Y - size * 0.5
+	if puff.y > highest then
+		puff.y = highest
+	end
+	-- 땅 밑으로는 들어가지 않고 옆으로 퍼짐 (발사 직후. 땅이 가까우면 이쪽이 이김)
 	local lowest = ground + size * 0.3
 	if puff.y < lowest and not puff.glow then
 		puff.y = lowest
