@@ -2,6 +2,7 @@
 -- 발사 행성 종류. 판이 새로 시작할 때마다 서버가 지난 판과 다른 행성을 하나 골라
 -- RoundState 의 Planet(행성 Id)·PlanetSeed(배치 씨앗) 속성으로 알립니다.
 -- 클라이언트 Planet.luau 가 이 값으로 둥근 행성과 주변 지형지물을 만들고, Backdrop 이 Sky 를 1단계 하늘로 씁니다.
+-- 빛 색·색감·떠다니는 입자 같은 분위기는 PlanetMoods.luau (같은 Id).
 -- 행성을 하나 더 넣으려면 아래 목록에 항목을 하나 더 쓰면 됩니다. (지형지물·소품 종류는 Planet.luau 의 BUILDERS 이름)
 -- 다음 판 행성은 정산 때 슬롯(PlanetSlot.luau)으로 뽑습니다: 지금 행성을 뺀 나머지에서 Weight(가중치) 비율대로.
 -- 가중치는 임시 값입니다 (6종 합 100: 정글·사막·바다 22, 얼음 16, 용암 12, 수정 6 = 희귀).
@@ -82,9 +83,9 @@ local LIST: { Planet } = {
 			{ Kind = "moon", Az = 215, El = 24, Size = 4, Colors = { rgb(120, 80, 76) } },
 		},
 		Sky = {
-			ClockTime = 18.3, Brightness = 1.3, Ambient = rgb(120, 72, 60), Outdoor = rgb(140, 84, 64),
-			Density = 0.24, Haze = 2.2, Color = rgb(255, 130, 80), Decay = rgb(120, 40, 24),
-			Streak = rgb(255, 215, 170), Clouds = 0.35,
+			ClockTime = 17.9, Brightness = 1.4, Ambient = rgb(57, 32, 24), Outdoor = rgb(150, 84, 64),
+			Density = 0.32, Haze = 2.6, Color = rgb(225, 105, 60), Decay = rgb(95, 28, 20),
+			Streak = rgb(255, 170, 90), Clouds = 0.45,
 		},
 	},
 	{
@@ -114,9 +115,9 @@ local LIST: { Planet } = {
 			{ Kind = "aurora", Az = 205, El = 30, Size = 30, Colors = { rgb(90, 255, 190), rgb(120, 170, 255) } },
 		},
 		Sky = {
-			ClockTime = 16.2, Brightness = 2.0, Ambient = rgb(120, 138, 165), Outdoor = rgb(150, 172, 205),
-			Density = 0.18, Haze = 1.2, Color = rgb(185, 225, 255), Decay = rgb(90, 140, 200),
-			Streak = rgb(230, 245, 255), Clouds = 0.3,
+			ClockTime = 18.9, Brightness = 1.6, Ambient = rgb(50, 60, 80), Outdoor = rgb(132, 158, 210),
+			Density = 0.22, Haze = 0.9, Color = rgb(150, 190, 240), Decay = rgb(60, 90, 160),
+			Streak = rgb(200, 240, 255), Clouds = 0.25,
 		},
 	},
 	{
@@ -149,9 +150,9 @@ local LIST: { Planet } = {
 			{ Kind = "moon", Az = 215, El = 28, Size = 4, Colors = { rgb(255, 230, 170) } },
 		},
 		Sky = {
-			ClockTime = 14.5, Brightness = 2.3, Ambient = rgb(100, 125, 105), Outdoor = rgb(120, 155, 125),
-			Density = 0.2, Haze = 1.5, Color = rgb(150, 230, 195), Decay = rgb(60, 140, 120),
-			Streak = rgb(220, 255, 230), Clouds = 0.5,
+			ClockTime = 16.8, Brightness = 2.2, Ambient = rgb(53, 62, 43), Outdoor = rgb(140, 164, 114),
+			Density = 0.34, Haze = 2.2, Color = rgb(175, 220, 150), Decay = rgb(70, 120, 70),
+			Streak = rgb(215, 255, 170), Clouds = 0.55,
 		},
 	},
 	{
@@ -182,9 +183,9 @@ local LIST: { Planet } = {
 			{ Kind = "moon", Az = 230, El = 22, Size = 3, Colors = { rgb(245, 240, 230) } },
 		},
 		Sky = {
-			ClockTime = 16.8, Brightness = 2.5, Ambient = rgb(145, 118, 92), Outdoor = rgb(175, 138, 102),
-			Density = 0.22, Haze = 2.0, Color = rgb(255, 205, 140), Decay = rgb(170, 100, 60),
-			Streak = rgb(255, 235, 195), Clouds = 0.1,
+			ClockTime = 13.8, Brightness = 3.0, Ambient = rgb(71, 58, 43), Outdoor = rgb(186, 152, 114),
+			Density = 0.26, Haze = 2.6, Color = rgb(240, 200, 150), Decay = rgb(200, 130, 80),
+			Streak = rgb(255, 225, 170), Clouds = 0.05,
 		},
 	},
 	{
@@ -214,9 +215,9 @@ local LIST: { Planet } = {
 			{ Kind = "ringed", Az = 205, El = 26, Size = 6, Colors = { rgb(170, 120, 255), rgb(255, 170, 240) } },
 		},
 		Sky = {
-			ClockTime = 20.8, Brightness = 1.1, Ambient = rgb(115, 85, 150), Outdoor = rgb(105, 78, 148),
-			Density = 0.16, Haze = 1.0, Color = rgb(185, 120, 255), Decay = rgb(70, 35, 130),
-			Streak = rgb(240, 205, 255), Clouds = 0,
+			ClockTime = 20.8, Brightness = 1.1, Ambient = rgb(43, 33, 62), Outdoor = rgb(114, 86, 164),
+			Density = 0.18, Haze = 1.0, Color = rgb(175, 110, 255), Decay = rgb(60, 30, 120),
+			Streak = rgb(255, 190, 250), Clouds = 0,
 		},
 	},
 	{
@@ -247,9 +248,9 @@ local LIST: { Planet } = {
 			{ Kind = "puffs", Az = 200, El = 14, Size = 22, Colors = { rgb(255, 255, 255) } },
 		},
 		Sky = {
-			ClockTime = 13.5, Brightness = 2.6, Ambient = rgb(110, 132, 152), Outdoor = rgb(132, 162, 192),
-			Density = 0.18, Haze = 1.3, Color = rgb(140, 200, 255), Decay = rgb(70, 125, 205),
-			Streak = rgb(230, 245, 255), Clouds = 0.7,
+			ClockTime = 14.6, Brightness = 2.8, Ambient = rgb(56, 68, 80), Outdoor = rgb(148, 180, 210),
+			Density = 0.14, Haze = 0.8, Color = rgb(150, 205, 255), Decay = rgb(60, 120, 210),
+			Streak = rgb(225, 250, 255), Clouds = 0.7,
 		},
 	},
 }

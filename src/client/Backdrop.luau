@@ -59,29 +59,31 @@ type Sky = {
 
 -- 스테이지별 하늘. 5번째부터는 우주.
 -- Density(안개 짙기)가 높으면 빛줄기·구름과 충격파가 흐려지므로 너무 올리지 않습니다.
+-- Ambient 는 하늘이 가린 곳(선실 안), Outdoor 는 바깥의 빛입니다. 선실이 바깥보다 어둡게 Ambient 는 Outdoor 의 38% 쯤
+-- (행성 하늘도 같음. 바깥이 아주 어두운 단계는 가장 밝은 색 성분이 40 이 되게 해서 선실이 너무 어둡지 않게)
 local SKIES: { Sky } = {
 	{ -- 붕괴하는 고향 행성: 노을빛 먼지
-		ClockTime = 17.6, Brightness = 2, Ambient = Color3.fromRGB(96, 92, 104), Outdoor = Color3.fromRGB(128, 116, 112),
+		ClockTime = 17.6, Brightness = 2, Ambient = Color3.fromRGB(52, 48, 46), Outdoor = Color3.fromRGB(138, 126, 120),
 		Density = 0.3, Haze = 2.2, Color = Color3.fromRGB(230, 150, 110), Decay = Color3.fromRGB(120, 60, 40),
 		Streak = Color3.fromRGB(255, 240, 205), Clouds = 0.25,
 	},
 	{ -- 폭풍 구름층: 어둡고 푸른 구름
-		ClockTime = 18.4, Brightness = 0.9, Ambient = Color3.fromRGB(58, 62, 78), Outdoor = Color3.fromRGB(60, 64, 80),
+		ClockTime = 18.4, Brightness = 1, Ambient = Color3.fromRGB(30, 32, 40), Outdoor = Color3.fromRGB(70, 74, 92),
 		Density = 0.38, Haze = 2.8, Color = Color3.fromRGB(90, 96, 116), Decay = Color3.fromRGB(40, 44, 60),
 		Streak = Color3.fromRGB(205, 225, 255), Clouds = 1,
 	},
 	{ -- 화산재 하늘: 붉은 재
-		ClockTime = 18.7, Brightness = 1.1, Ambient = Color3.fromRGB(80, 56, 52), Outdoor = Color3.fromRGB(96, 64, 56),
+		ClockTime = 18.7, Brightness = 1.2, Ambient = Color3.fromRGB(40, 27, 24), Outdoor = Color3.fromRGB(106, 70, 62),
 		Density = 0.34, Haze = 2.6, Color = Color3.fromRGB(150, 80, 60), Decay = Color3.fromRGB(70, 30, 24),
 		Streak = Color3.fromRGB(255, 205, 150), Clouds = 0.7,
 	},
 	{ -- 오로라 하늘
-		ClockTime = 21, Brightness = 0.8, Ambient = Color3.fromRGB(50, 70, 84), Outdoor = Color3.fromRGB(40, 70, 80),
+		ClockTime = 21, Brightness = 0.9, Ambient = Color3.fromRGB(21, 35, 40), Outdoor = Color3.fromRGB(48, 80, 92),
 		Density = 0.2, Haze = 0.6, Color = Color3.fromRGB(70, 160, 150), Decay = Color3.fromRGB(30, 60, 90),
 		Streak = Color3.fromRGB(200, 255, 230), Clouds = 0,
 	},
 	{ -- 우주
-		ClockTime = 0, Brightness = 0.6, Ambient = Color3.fromRGB(46, 48, 66), Outdoor = Color3.fromRGB(30, 32, 48),
+		ClockTime = 0, Brightness = 0.7, Ambient = Color3.fromRGB(26, 27, 40), Outdoor = Color3.fromRGB(36, 38, 56),
 		Density = 0.02, Haze = 0, Color = Color3.fromRGB(20, 22, 40), Decay = Color3.fromRGB(10, 10, 20),
 		Streak = Color3.fromRGB(215, 235, 255), Clouds = 0,
 	},

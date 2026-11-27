@@ -7,6 +7,7 @@
 --    모서리를 따라 붕괴 균열이 빛납니다.
 --  · 지형지물: 멀리서도 보이는 큰 것(화산·산·메사·수정 첨탑 등)과 발사대 근처 소품(나무·바위·수정 등).
 --  · 하늘: 행성마다 다른 천체(붉은 해, 달, 고리 행성, 성운, 오로라, 구름). 하늘빛은 Planets.luau 의 Sky 를 Backdrop 이 씀.
+--  · 분위기: 떠다니는 입자·빛나는 소품의 불빛·발사장 불빛 색은 PlanetMood.luau 가 행성을 만들 때 더함 (빛·색감도 그 모듈).
 --  · 비행: 로켓은 원점에 그대로 있고 행성 쪽을 움직입니다. 처음 몇 초는 실제처럼 아래로 내려가고,
 --    그 뒤로는 '보이는 고도'가 거리(km)의 0.38제곱으로 느리게 늘어 행성이 점점 작아지는 공이 됩니다.
 --    카메라는 옆을 보고 있으므로 행성을 시선 아래쪽으로 돌려 놓아 화면에 계속 보이게 합니다
@@ -22,6 +23,7 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared:WaitForChild("Config"))
 local Planets = require(Shared:WaitForChild("Planets"))
 
+local PlanetMood = require(script.Parent:WaitForChild("PlanetMood"))
 local State = require(script.Parent:WaitForChild("State"))
 
 local Planet = {}
@@ -70,6 +72,8 @@ type PadPart = { part: BasePart, cframe: CFrame, size: Vector3 }
 local padParts: { PadPart } = {}
 local padScale = 1
 local padApplied = "" -- 발사 광장에 마지막으로 적용한 자리 (같으면 다시 옮기지 않음)
+local padModel: Instance? = nil
+local padTint = "" -- 발사장 불빛을 칠한 행성 (행성이 바뀌면 다시 칠함)
 local anchor: Vector3? = nil
 local lastApply = 0
 local toastPending = ""
@@ -969,6 +973,7 @@ local function build(planet: Planets.Planet, seed: number)
 			item.CastShadow = true
 		end
 	end
+	PlanetMood.decorate(props, planet.Id) -- 떠다니는 입자·소품 불빛 (소품과 함께 움직이고 숨음)
 	addLayer("core", core)
 	addLayer("props", props)
 
@@ -1133,6 +1138,7 @@ local function findPad()
 			table.insert(padParts, { part = item, cframe = item.CFrame, size = item.Size })
 		end
 	end
+	padModel = found
 end
 
 -- ------------------------------------------------------------ 매 프레임
@@ -1161,6 +1167,10 @@ function Planet.update(_dt: number)
 	if toastPending ~= "" and not aboard then
 		State.emit("Toast", toastPending)
 		toastPending = ""
+	end
+	if padModel and builtId ~= "" and padTint ~= builtId then
+		padTint = builtId
+		PlanetMood.tintPad(padModel :: Instance, builtId)
 	end
 
 	local camera = Workspace.CurrentCamera
