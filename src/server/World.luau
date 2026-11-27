@@ -103,7 +103,7 @@ local function buildPad(parent: Instance): Model
 	-- 발사 광장 (행성 꼭대기 면에 조금 묻힘. 광장 밖 땅과 지형지물은 클라이언트가 만드는 행성)
 	local plaza = cylinder(model, "Plaza", PLAZA_RADIUS, -14, 0, PLAZA, Enum.Material.Concrete)
 	model.PrimaryPart = plaza
-	-- 발사대·발사탑·연료 탱크·관제 벙커·조명탑·광장 표시 (Spawn 은 맨 마지막에: 클라이언트가 Spawn 을 보고 발사장이 다 왔다고 봄)
+	-- 발사장 시설 (LaunchPad.luau: 발사대·발사탑과 탑승 팔·건물·광장 표시) (Spawn 은 맨 마지막에: 클라이언트가 Spawn 을 보고 발사장이 다 왔다고 봄)
 	LaunchPad.build(model, {
 		plazaRadius = PLAZA_RADIUS,
 		mountRadius = W.MountRadius,

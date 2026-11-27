@@ -23,16 +23,17 @@ ROFLY(로블록스FLY) 게임 저장소. [Rojo](https://rojo.space)로 VS Code�
 
 ## 외형 모델 (GPT가 만든 코드)
 
-로켓 겉면·발사장·행성 소품의 모양은 GPT 최신 모델이 쓴 모듈이 ▶ Play 때 파트로 만듭니다.
+로켓 겉면·발사장·행성 소품은 GPT 최신 모델이 새로 디자인한 'BREAKLINE'입니다. 디자인 문서는 `docs/exterior/DESIGN.md`(콘셉트 그림 `docs/exterior/concepts/`), 파트 수·치수는 `docs/exterior/NOTES.md`. 아래 모듈이 ▶ Play 때 파트로 만듭니다.
 
 | 파일 | 만드는 것 | 폰 사양 한도 |
 |---|---|---|
-| `src/server/RocketShell.luau` | 로켓 겉면 (선체·코·플랩·열 타일·엔진 종) | 파트 180개, 열 빛(`Heat` 속성) 16개 |
-| `src/server/LaunchPad.luau` | 발사장 시설 (발사대·발사탑·탱크·벙커·조명탑·광장 표시) | 파트 90개, 빛 2개 |
-| `src/client/PlanetProps.luau` | 행성 소품 11종·지형지물 8종 | 소품 5개(평균 3.5), 지형지물 16개, 행성마다 500개 |
+| `src/server/RocketShell.luau` | 구조선 CITADEL 겉면 (하부 장갑·선실 테두리·코·엔진 종) | 파트 180개, 열 빛(`Heat` 속성) 16개 |
+| `src/server/LaunchPad.luau` | 발사장 LAST GATE (발사대·발사탑 관문과 탑승 팔·운영동·광장 표시) | 파트 90개, 빛 2개 |
+| `src/client/PlanetProps.luau` | 행성 소품 11종·지형지물 8종 (행성마다 다른 바이옴 모양) | 소품 5개(평균 3.5), 지형지물 16개, 행성마다 500개 |
 
 - 모든 외형은 폰에서도 쉽게 돌아가야 합니다. 위 한도를 넘기지 않습니다.
-- 다른 코드가 이름으로 찾는 파트: `LowerHull`·`UpperHull`·`NoseTip`, `RimLight`·`ControlWindow`·`MastLamp`(안에 SpotLight)·`Mount`·`TowerArm`·`FuelTank`, 소품의 `Pool`·`Cap`·`Crystal`.
+- 다른 코드가 이름으로 찾는 파트: `LowerHull`·`UpperHull`·`NoseTip`, `RimLight`·`ControlWindow`·`MastLamp`(안에 SpotLight)·`Mount`·`TowerArm`(연료 탱크를 만들면 `FuelTank`), 소품의 `Pool`·`Cap`·`Crystal`.
+- 모양을 바꿀 때는 손으로 고치지 않고 GPT에게 다시 맡깁니다.
 
 ## 처음 세팅 (맥, 1회)
 

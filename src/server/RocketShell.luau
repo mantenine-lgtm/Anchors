@@ -13,58 +13,109 @@ export type Opts = {
 }
 
 local METAL = Enum.Material.Metal
-local STEEL = Color3.fromRGB(178, 182, 188)
-local WELD = Color3.fromRGB(129, 132, 137)
-local SOOT = Color3.fromRGB(93, 83, 82)
-local CHARCOAL = Color3.fromRGB(43, 42, 44)
-local TILE = Color3.fromRGB(29, 30, 33)
-local NOZZLE = Color3.fromRGB(112, 100, 91)
-local TILE_CENTER = 75
-local UPRIGHT = CFrame.Angles(0, 0, math.pi / 2)
+local PLATE = Enum.Material.DiamondPlate
+local SATIN = Color3.fromRGB(178, 190, 195)
+local NOSE = Color3.fromRGB(201, 212, 216)
+local CHINE = Color3.fromRGB(126, 144, 153)
+local SHADE = Color3.fromRGB(89, 108, 119)
+local THERMAL = Color3.fromRGB(39, 48, 54)
+local BRONZE = Color3.fromRGB(128, 104, 78)
+local SILT = Color3.fromRGB(77, 63, 50)
+local CYLINDER_UP = CFrame.Angles(0, 0, math.pi / 2)
 
-local function ringPoint(angleDeg: number, radius: number, y: number): Vector3
-	local theta = math.rad(angleDeg)
-	return Vector3.new(math.sin(theta) * radius, y, math.cos(theta) * radius)
-end
-
-local function finish(part: BasePart, parent: Instance, name: string, size: Vector3, frame: CFrame, color: Color3, material: Enum.Material, solid: boolean)
+local function place(parent: Instance, part: BasePart, name: string, size: Vector3, frame: CFrame,
+	color: Color3, material: Enum.Material, solid: boolean, heat: number?): BasePart
 	part.Name = name
-	part.Anchored = true
-	part.CanCollide = solid
-	part.CanQuery = solid
-	part.CanTouch = solid
-	part.CastShadow = solid
-	part.TopSurface = Enum.SurfaceType.Smooth
-	part.BottomSurface = Enum.SurfaceType.Smooth
 	part.Size = size
 	part.CFrame = frame
 	part.Color = color
 	part.Material = material
+	part.Anchored = true
+	part.CanCollide = solid
+	part.CanTouch = solid
+	part.CanQuery = solid
+	part.CastShadow = solid
+	part.TopSurface = Enum.SurfaceType.Smooth
+	part.BottomSurface = Enum.SurfaceType.Smooth
+	if heat then
+		part:SetAttribute("Heat", heat)
+	end
 	part.Parent = parent
-end
-
-local function block(parent: Instance, name: string, size: Vector3, frame: CFrame, color: Color3, material: Enum.Material, solid: boolean): Part
-	local part = Instance.new("Part")
-	finish(part, parent, name, size, frame, color, material, solid)
 	return part
 end
 
-local function wedge(parent: Instance, name: string, size: Vector3, frame: CFrame, color: Color3, material: Enum.Material, solid: boolean): WedgePart
-	local part = Instance.new("WedgePart")
-	finish(part, parent, name, size, frame, color, material, solid)
-	return part
+local function box(parent: Instance, name: string, size: Vector3, frame: CFrame, color: Color3,
+	material: Enum.Material, solid: boolean, heat: number?): BasePart
+	return place(parent, Instance.new("Part"), name, size, frame, color, material, solid, heat)
 end
 
-local function cylinder(parent: Instance, name: string, radius: number, y0: number, y1: number, color: Color3, material: Enum.Material, solid: boolean, axis: Vector3?): Part
+local function wedge(parent: Instance, name: string, size: Vector3, frame: CFrame, color: Color3,
+	material: Enum.Material, heat: number?): BasePart
+	return place(parent, Instance.new("WedgePart"), name, size, frame, color, material, true, heat)
+end
+
+local function cylinder(parent: Instance, name: string, radius: number, x: number, z: number,
+	y0: number, y1: number, color: Color3, material: Enum.Material): BasePart
 	local part = Instance.new("Part")
 	part.Shape = Enum.PartType.Cylinder
-	local center = (axis or Vector3.zero) + Vector3.new(0, (y0 + y1) / 2, 0)
-	finish(part, parent, name, Vector3.new(y1 - y0, 2 * radius, 2 * radius), CFrame.new(center) * UPRIGHT, color, material, solid)
-	return part
+	return place(parent, part, name, Vector3.new(y1 - y0, 2 * radius, 2 * radius),
+		CFrame.new(x, (y0 + y1) / 2, z) * CYLINDER_UP, color, material, true)
 end
 
--- Planet.triangle's longest-edge split. The input is the middle plane of the flap.
-local function triangle(parent: Instance, name: string, a: Vector3, b: Vector3, c: Vector3, thickness: number, color: Color3)
+local function octagon(y: number, x: number, z: number, bevel: number): { Vector3 }
+	return {
+		Vector3.new(-x + bevel, y, z), Vector3.new(x - bevel, y, z),
+		Vector3.new(x, y, z - bevel), Vector3.new(x, y, -z + bevel),
+		Vector3.new(x - bevel, y, -z), Vector3.new(-x + bevel, y, -z),
+		Vector3.new(-x, y, -z + bevel), Vector3.new(-x, y, z - bevel),
+	}
+end
+
+-- The upper and lower edges are parallel. The common width is a single steel
+-- plate. The remaining triangles lie on the exact same outer plane.
+local function panel(parent: Instance, name: string, a: Vector3, b: Vector3, c: Vector3, d: Vector3,
+	depth: number, color: Color3, material: Enum.Material, heat: number?): BasePart
+	local across = (b - a).Unit
+	local lowerRight = (b - a).Magnitude
+	local upperLeft = (d - a):Dot(across)
+	local upperRight = (c - a):Dot(across)
+	local lift = d - a - across * upperLeft
+	local up = lift.Unit
+	local outward = across:Cross(up)
+	local origin = a + lift / 2 - outward * (depth / 2)
+	local left = math.max(0, upperLeft)
+	local right = math.min(lowerRight, upperRight)
+	local center = box(parent, name, Vector3.new(right - left, lift.Magnitude, depth),
+		CFrame.fromMatrix(origin + across * ((left + right) / 2), across, up, outward), color, material, true, heat)
+
+	for side, ends in ipairs({ { 0, upperLeft }, { lowerRight, upperRight } }) do
+		local bottom, top = ends[1], ends[2]
+		local difference = top - bottom
+		if math.abs(difference) > 0.005 then
+			local back = across
+			if side == 2 then
+				back = -across
+			end
+			local wedgeUp = up
+			if difference * across:Dot(back) < 0 then
+				wedgeUp = -up
+			end
+			local at = origin + across * ((bottom + top) / 2)
+			wedge(parent, name, Vector3.new(depth, lift.Magnitude, math.abs(difference)),
+				CFrame.fromMatrix(at, wedgeUp:Cross(back), wedgeUp, back), color, material, heat)
+		end
+	end
+	return center
+end
+
+-- The tested terrain helper's longest-edge split closes the crown ends.
+local function triangle(parent: Instance, name: string, a: Vector3, b: Vector3, c: Vector3, inside: Vector3,
+	depth: number, color: Color3, heat: number?)
+	local normal = (b - a):Cross(c - a).Unit
+	if normal:Dot((a + b + c) / 3 - inside) < 0 then
+		normal = -normal
+	end
+	local inward = -normal * (depth / 2)
 	local ab, ac, bc = b - a, c - a, c - b
 	local abd, acd, bcd = ab:Dot(ab), ac:Dot(ac), bc:Dot(bc)
 	if abd >= acd and abd >= bcd then
@@ -77,265 +128,198 @@ local function triangle(parent: Instance, name: string, a: Vector3, b: Vector3, 
 	local back = bc.Unit
 	local up = back:Cross(right)
 	local height = math.abs(ab:Dot(up))
-	wedge(parent, name, Vector3.new(thickness, height, math.abs(ab:Dot(back))),
-		CFrame.fromMatrix((a + b) / 2, right, up, back), color, METAL, true)
-	wedge(parent, name, Vector3.new(thickness, height, math.abs(ac:Dot(back))),
-		CFrame.fromMatrix((a + c) / 2, -right, up, -back), color, METAL, true)
+	wedge(parent, name, Vector3.new(depth, height, math.abs(ab:Dot(back))),
+		CFrame.fromMatrix((a + b) / 2 + inward, right, up, back), color, METAL, heat)
+	wedge(parent, name, Vector3.new(depth, height, math.abs(ac:Dot(back))),
+		CFrame.fromMatrix((a + c) / 2 + inward, -right, up, -back), color, METAL, heat)
 end
 
-local function radialFrame(angle: number, radius: number, y: number): CFrame
-	return CFrame.new(ringPoint(angle, radius, y)) * CFrame.Angles(0, math.rad(angle), 0)
+local function loft(parent: Instance, name: string, lower: { Vector3 }, upper: { Vector3 },
+	depth: number, colors: { Color3 }, material: Enum.Material): { BasePart }
+	local panels = {}
+	for side = 1, 8 do
+		local nextSide = side % 8 + 1
+		panels[side] = panel(parent, name, lower[side], lower[nextSide], upper[nextSide], upper[side],
+			depth, colors[side], material)
+	end
+	return panels
 end
 
--- The far corners of a chord tile sit 0.285 studs above the nominal cylinder.
-local function tileCourse(parent: Instance, opts: Opts, y0: number, y1: number, rows: number)
-	local radius = opts.hullRadius
-	local halfAngle = 4.25
-	local outer = radius + 0.285
-	local width = 2 * outer * math.sin(math.rad(halfAngle))
-	local depth = 0.24
-	local standOff = outer * math.cos(math.rad(halfAngle)) - depth / 2
-	local pitch = (y1 - y0) / rows
-	for column = 0, 1 do
-		local angle = TILE_CENTER + (column - 0.5) * 9
-		local stagger = column * pitch * 0.27
-		for row = 0, rows - 1 do
-			local bottom = y0 + row * pitch + stagger
-			local top = bottom + pitch
-			if row == 0 then
-				bottom = y0
-			end
-			if row == rows - 1 then
-				top = y1
-			end
-			bottom += 0.07
-			top -= 0.07
-			local clear = true
-			if top >= opts.windowBottomY and bottom <= opts.windowTopY then
-				-- The inward corners subtend a slightly larger angle.
-				local cornerAngle = math.deg(math.atan2(width / 2, standOff - depth / 2))
-				for _, window in ipairs(opts.windows) do
-					local separation = math.abs((angle - window.centerDeg + 180) % 360 - 180)
-					if separation <= window.halfDeg + cornerAngle then
-						clear = false
-						break
-					end
-				end
-			end
-			if clear then
-				local color = TILE:Lerp(CHARCOAL, ((row + 2 * column) % 4) * 0.18)
-				block(parent, "HeatTile", Vector3.new(width, top - bottom, depth),
-					radialFrame(angle, standOff, (bottom + top) / 2), color, Enum.Material.Slate, false)
-			end
-		end
-	end
+local function armorMark(parent: Instance, plate: BasePart, offsetX: number, lean: number)
+	local thickness = 0.18
+	local frame = plate.CFrame * CFrame.new(offsetX * plate.Size.X, -plate.Size.Y * 0.11, plate.Size.Z / 2 + 0.05)
+		* CFrame.Angles(0, 0, math.rad(lean))
+	box(parent, "ForgingMark", Vector3.new(plate.Size.X * 0.053, plate.Size.Y * 0.32, thickness),
+		frame, BRONZE, METAL, false)
 end
 
-local function plateHull(parent: Instance, radius: number, y0: number, y1: number, bays: number)
-	local height = (y1 - y0) / bays
-	for bay = 0, bays - 1 do
-		local angle = 12 + bay * 13
-		local color = STEEL:Lerp(WELD, 0.07 + bay * 0.05)
-		block(parent, "MillFinishPanel", Vector3.new(radius * 0.17, height - 0.34, 0.21),
-			radialFrame(angle, radius - 0.075, y0 + (bay + 0.5) * height), color, METAL, false)
-	end
-	for seam = 1, bays - 1 do
-		local y = y0 + height * seam
-		cylinder(parent, "CircumferentialWeld", radius + 0.14, y - 0.10, y + 0.10, WELD, METAL, false)
-	end
-	for _, angle in ipairs({ -49, 31 }) do
-		block(parent, "LongitudinalWeld", Vector3.new(0.18, y1 - y0 - 0.20, 0.18),
-			radialFrame(angle, radius + 0.045, (y0 + y1) / 2), WELD, METAL, false)
-	end
-end
-
-local function scorchBand(parent: Instance, radius: number, baseY: number)
-	cylinder(parent, "Scorch", radius + 0.18, baseY + 0.07, baseY + radius * 0.19,
-		SOOT:Lerp(CHARCOAL, 0.45), Enum.Material.CorrodedMetal, false)
-
-	-- The overlapping washes have slanted edges. Axial thickness contributes
-	-- halfHeight * sin(tilt) to the radial envelope.
-	for _, wash in ipairs({ { 0.15, 0.11, 0.22, 3, 20 }, { 0.13, 0.075, 0.195, 4, 137 } }) do
-		local fringe = Instance.new("Part")
-		fringe.Shape = Enum.PartType.Cylinder
-		local tilt = CFrame.Angles(0, math.rad(wash[5]), 0) * CFrame.Angles(math.rad(wash[4]), 0, 0)
-		local frame = CFrame.new(0, baseY + radius * wash[3], 0) * tilt * UPRIGHT
-		local diameter = 2 * (radius + wash[1])
-		local tint = SOOT:Lerp(STEEL, 0.13 + wash[4] * 0.055)
-		finish(fringe, parent, "Scorch", Vector3.new(radius * wash[2], diameter, diameter),
-			frame, tint, Enum.Material.CorrodedMetal, false)
-	end
-end
-
-local function finishHull(parent: Instance, opts: Opts)
+local function buildLower(parent: Instance, opts: Opts): BasePart
 	local r = opts.hullRadius
-	plateHull(parent, r, opts.baseY, opts.cabinFloorY, 3)
-	plateHull(parent, r, opts.cabinCeilY, opts.topY, 2)
-	cylinder(parent, "AftPanelRing", r + 0.23, opts.baseY + 0.18, opts.baseY + 1.26, WELD, METAL, false)
-	cylinder(parent, "ShoulderWeld", r + 0.15, opts.topY - 0.42, opts.topY - 0.22, WELD, METAL, false)
-	for _, seamY in ipairs({ opts.baseY + (opts.cabinFloorY - opts.baseY) / 3, (opts.cabinCeilY + opts.topY) / 2 }) do
-		for _, angle in ipairs({ 18, 24, 30 }) do
-			local rivet = Instance.new("Part")
-			rivet.Shape = Enum.PartType.Ball
-			finish(rivet, parent, "Rivet", Vector3.new(0.42, 0.42, 0.42),
-				CFrame.new(ringPoint(angle, r + 0.035, seamY + 0.62)), STEEL:Lerp(WELD, 0.45), METAL, false)
-		end
-	end
-	scorchBand(parent, r, opts.baseY)
-	tileCourse(parent, opts, opts.baseY + 1.4, opts.cabinFloorY, 5)
-	tileCourse(parent, opts, opts.cabinFloorY, opts.cabinCeilY, 2)
-	tileCourse(parent, opts, opts.cabinCeilY, opts.topY - 0.45, 2)
+	local y0, y1 = opts.baseY, opts.cabinFloorY
+	local height = y1 - y0
+	local sill = y1 - 9
+	local miter = math.pi / 8
+	local round = math.cos(miter)
+	local clip = round - math.sin(miter)
+
+	local lower = cylinder(parent, "LowerHull", 0.87 * r, 0, 0, y0, sill + 0.03, SHADE, METAL)
+	local heel = octagon(y0, 0.91 * r, 0.88 * r, 0.48 * r)
+	local chine = octagon(y0 + 0.19 * height, 1.177 * r, 1.096 * r, 0.543 * r)
+	local belt = octagon(y0 + 0.50 * height, 1.183 * r, 1.074 * r, 0.551 * r)
+	local waist = octagon(sill, round * r, round * r, clip * r)
+
+	loft(parent, "ThermalHeel", heel, chine, 0.042 * r,
+		{ THERMAL, THERMAL, SILT, THERMAL, THERMAL, THERMAL, SILT, THERMAL }, PLATE)
+	loft(parent, "ThrustArmor", chine, belt, 0.044 * r,
+		{ THERMAL, SHADE, THERMAL, THERMAL, THERMAL, SHADE, THERMAL, THERMAL }, METAL)
+	local shoulders = loft(parent, "ShoulderArmor", belt, waist, 0.043 * r,
+		{ SATIN, CHINE, SHADE, CHINE, SATIN, CHINE, SHADE, CHINE }, METAL)
+	armorMark(parent, shoulders[1], 0.23, -13)
+	armorMark(parent, shoulders[5], 0.23, -13)
+
+	cylinder(parent, "CabinSill", r, 0, 0, sill, y1 - 2.4, SHADE, METAL)
+	cylinder(parent, "SillEdge", r, 0, 0, y1 - 2.4, y1, BRONZE, METAL)
+	return lower
 end
 
--- Exterior hexagon on a sloping nose panel. Each pair of wedges ends in a point.
-local function noseTile(parent: Instance, face: CFrame, width: number, length: number, color: Color3)
-	local depth = 0.20
-	local body = width * 0.62
-	local sideWidth = (width - body) / 2
-	block(parent, "NoseHeatTile", Vector3.new(body, length, depth), face, color, Enum.Material.Slate, false)
-	for _, side in ipairs({ -1, 1 }) do
-		for _, half in ipairs({ -1, 1 }) do
-			local at = face:PointToWorldSpace(Vector3.new(side * (body + sideWidth) / 2, half * length / 4, 0))
-			local up = half * face.UpVector
-			local back = -side * face.RightVector
-			wedge(parent, "NoseHeatTileBevel", Vector3.new(depth, length / 2, sideWidth),
-				CFrame.fromMatrix(at, up:Cross(back), up, back), color, Enum.Material.Slate, false)
-		end
-	end
-end
+local function buildUpper(parent: Instance, opts: Opts): { Vector3 }
+	local r = opts.hullRadius
+	local collarTop, sectionBase, roofSeat = opts.cabinCeilY + 5, opts.cabinCeilY + 22, opts.topY
+	local x, z, bevel = 0.996 * r, 0.923 * r, 0.52 * r
+	local round = math.cos(math.pi / 8)
+	local clip = round - math.sin(math.pi / 8)
+	local upperSeat = octagon(sectionBase, x, z, bevel)
+	cylinder(parent, "CabinLintel", r, 0, 0, opts.cabinCeilY, collarTop, CHINE, METAL)
+	loft(parent, "LintelArmor", octagon(collarTop, round * r, round * r, clip * r), upperSeat, 0.037 * r,
+		{ CHINE, SATIN, SHADE, CHINE, CHINE, SATIN, SHADE, CHINE }, METAL)
 
-local function buildNose(parent: Instance, radius: number, topY: number)
-	-- A tangent ogive joined internally tangent to a spherical cap.
-	local curveR = radius * (1 + 1.9 ^ 2) / 2
-	local capR = radius * 0.25
-	local centerOffset = curveR - radius
-	local capY = math.sqrt((curveR - capR) ^ 2 - centerOffset ^ 2)
-	local joinY = capY * curveR / (curveR - capR)
-	local levels = { 0, 0.27, 0.52, 0.77, 1 }
-	local sides = 10
-	local half = math.pi / sides
-	local thickness = radius * 0.04
-	for row = 1, #levels - 1 do
-		local y0 = joinY * levels[row]
-		local y1 = joinY * levels[row + 1]
-		local r0 = math.sqrt(curveR ^ 2 - y0 ^ 2) - centerOffset
-		local r1 = math.sqrt(curveR ^ 2 - y1 ^ 2) - centerOffset
-		local width0 = 2 * r0 * math.sin(half)
-		local width1 = 2 * r1 * math.sin(half)
-		local wing = (width0 - width1) / 2
-		-- The shallow courses can lap at the side seams. Tapered courses
-		-- keep the steeper upper silhouette clean around the cap.
-		local tapered = row >= 3
-		local plateWidth = width0
-		if tapered then
-			plateWidth = width1
-		end
-		for side = 0, sides - 1 do
-			local angle = TILE_CENTER + side * 360 / sides
-			local low = ringPoint(angle, r0 * math.cos(half), topY + y0)
-			local high = ringPoint(angle, r1 * math.cos(half), topY + y1)
-			local rise = high - low
-			local right = ringPoint(angle + 90, 1, 0)
-			local up = rise.Unit
-			local outward = right:Cross(up)
-			local face = CFrame.fromMatrix((low + high) / 2, right, up, outward)
-			local color = STEEL:Lerp(WELD, ((side + row * 2) % 5) * 0.045)
-			local plate = block(parent, "NosePanel", Vector3.new(plateWidth, rise.Magnitude, thickness),
-				face * CFrame.new(0, 0, -thickness / 2), color, METAL, true)
-			if side == 2 or side == 6 or side == 9 then
-				plate:SetAttribute("Heat", 0.60 + 0.12 * (row - 1))
+	local midpoint, height = (sectionBase + roofSeat) / 2, roofSeat - sectionBase
+	box(parent, "UpperHull", Vector3.new(2 * (x - bevel), height, 2 * z), CFrame.new(0, midpoint, 0),
+		SATIN, METAL, true, 0.3)
+	for _, sideX in ipairs({ -1, 1 }) do
+		box(parent, "FlankArmor", Vector3.new(bevel, height, 2 * (z - bevel)),
+			CFrame.new(sideX * (x - bevel / 2), midpoint, 0), SHADE, METAL, true)
+		for _, sideZ in ipairs({ -1, 1 }) do
+			local up = Vector3.zAxis * sideZ
+			local back = Vector3.xAxis * -sideX
+			local at = Vector3.new(sideX * (x - bevel / 2), midpoint, sideZ * (z - bevel / 2))
+			local name, heat = "FlankChine", nil
+			if sideZ > 0 then
+				name, heat = "LeadingEdge", 0.5
 			end
-			if tapered then
-				for _, sign in ipairs({ -1, 1 }) do
-					local at = face:PointToWorldSpace(Vector3.new(sign * (width1 + wing) / 2, 0, -thickness / 2))
-					local wedgeUp = sign * right
-					local wedgeBack = -up
-					wedge(parent, "NosePanelTaper", Vector3.new(thickness, wing, rise.Magnitude),
-						CFrame.fromMatrix(at, wedgeUp:Cross(wedgeBack), wedgeUp, wedgeBack), color, METAL, true)
-				end
-			end
-			if side == 0 then
-				local tileFrame = face * CFrame.new(0, 0, 0.12)
-				local width = math.min((width0 + width1) * 0.235, width1 * 0.96)
-				local length = rise.Magnitude - 0.24
-				if row == 1 then
-					noseTile(parent, tileFrame, width, length, TILE)
-				else
-					local tint = TILE:Lerp(CHARCOAL, row % 2 * 0.25)
-					block(parent, "NoseHeatTile", Vector3.new(width, length, 0.20),
-						tileFrame, tint, Enum.Material.Slate, false)
-				end
+			wedge(parent, name, Vector3.new(height, bevel, bevel),
+				CFrame.fromMatrix(at, up:Cross(back), up, back), CHINE, METAL, heat)
+		end
+	end
+	return octagon(roofSeat, x, z, bevel)
+end
+
+local function buildCrown(parent: Instance, opts: Opts, seat: { Vector3 })
+	local r, y = opts.hullRadius, opts.topY
+	local depth = 0.047 * r
+	local crestY, crestZ = y + 1.62 * r, -0.30 * r
+	local left = Vector3.new(-0.65 * r, crestY, crestZ)
+	local right = Vector3.new(0.65 * r, crestY, crestZ)
+	local inside = Vector3.new(0, y + 0.2 * r, 0)
+
+	panel(parent, "ForeCrown", seat[1], seat[2], right, left, depth, NOSE, METAL, 0.63)
+	panel(parent, "AftCrown", seat[5], seat[6], left, right, depth, SATIN, METAL, 0.74)
+	for side = 2, 4 do
+		local heat = nil
+		if side == 3 then
+			heat = 0.87
+		end
+		triangle(parent, "CrownCheek", seat[side], seat[side + 1], right, inside, depth, CHINE, heat)
+	end
+	for side = 6, 8 do
+		local heat = nil
+		if side == 7 then
+			heat = 0.87
+		end
+		triangle(parent, "CrownCheek", seat[side], seat[side % 8 + 1], left, inside, depth, CHINE, heat)
+	end
+
+	box(parent, "NoseTip", Vector3.new(1.27 * r, 0.084 * r, 0.108 * r),
+		CFrame.new(0, crestY + 0.009 * r, crestZ), BRONZE, METAL, true, 1)
+end
+
+local function angularGap(a: number, b: number): number
+	return math.abs((a - b + 180) % 360 - 180)
+end
+
+local function windowInlay(parent: Instance, opts: Opts, name: string, azimuth: number, halfWidth: number,
+	y0: number, y1: number, color: Color3)
+	local r, depth = opts.hullRadius, 0.21
+	local outer = r + 0.285
+	local theta = math.rad(halfWidth)
+	local chord = outer * math.sin(theta)
+	local apothem = outer * math.cos(theta)
+	if y0 <= opts.windowTopY and y1 >= opts.windowBottomY then
+		local edgeAngle = math.deg(math.atan2(chord, apothem - depth))
+		for _, window in ipairs(opts.windows) do
+			if angularGap(azimuth, window.centerDeg) <= window.halfDeg + edgeAngle + 0.35 then
+				return
 			end
 		end
 	end
-	local tip = Instance.new("Part")
-	tip.Shape = Enum.PartType.Ball
-	finish(tip, parent, "NoseTip", Vector3.one * (2 * capR), CFrame.new(0, topY + capY, 0), STEEL, METAL, true)
-	tip:SetAttribute("Heat", 1)
+	local aim = math.rad(azimuth)
+	local radius = apothem - depth / 2
+	local at = Vector3.new(math.sin(aim) * radius, (y0 + y1) / 2, math.cos(aim) * radius)
+	box(parent, name, Vector3.new(2 * chord, y1 - y0, depth),
+		CFrame.new(at) * CFrame.Angles(0, aim, 0), color, METAL, false)
 end
 
-local function flap(parent: Instance, angle: number, r: number, originY: number, forward: boolean)
-	local name = "AftFlap"
-	local profile = { { 0.95, 0.42 }, { 1.69, 0.14 }, { 1.65, 0.71 }, { 0.95, 1.34 } }
-	local thickness = 0.075 * r
-	if forward then
-		name = "ForwardFlap"
-		profile = { { 0.89, 0.08 }, { 1.41, -0.12 }, { 1.37, 0.25 }, { 0.84, 0.68 } }
-		thickness = 0.061 * r
+local function buildWindowFrames(parent: Instance, opts: Opts)
+	local above = opts.cabinCeilY - opts.windowTopY
+	local below = opts.windowBottomY - opts.cabinFloorY
+	for _, window in ipairs(opts.windows) do
+		local center, half = window.centerDeg, window.halfDeg
+		if above > 0 then
+			for i = -2, 2 do
+				windowInlay(parent, opts, "BrowInlay", center + i * half / 2.55, math.min(4.5, half / 10),
+					opts.windowTopY + above * 0.22, opts.windowTopY + above * 0.85, SATIN)
+			end
+		end
+		if below > 0 then
+			for i = -1, 1 do
+				windowInlay(parent, opts, "SillInlay", center + i * half * 0.65, math.min(4.4, half / 9),
+					opts.cabinFloorY + below * 0.23, opts.cabinFloorY + below * 0.8, BRONZE)
+			end
+		end
+		for _, sign in ipairs({ -1, 1 }) do
+			windowInlay(parent, opts, "WindowJamb", center + sign * (half + 6.7), 4.4,
+				opts.windowBottomY + 0.24, opts.windowTopY - 0.24, SHADE)
+		end
 	end
-	local points = {}
-	for i, pair in ipairs(profile) do
-		points[i] = ringPoint(angle, pair[1] * r, originY + pair[2] * r)
-	end
-	local a, b, c, d = points[1], points[2], points[3], points[4]
-	triangle(parent, name, a, b, c, thickness, STEEL)
-	triangle(parent, name, a, c, d, thickness, STEEL)
-	local tangent = ringPoint(angle + 90, 1, 0)
-	local hinge = d - a
-	block(parent, name .. "Hinge", Vector3.new(thickness * 1.75, hinge.Magnitude, r * 0.13),
-		CFrame.fromMatrix((a + d) / 2, tangent, hinge.Unit, tangent:Cross(hinge.Unit)), WELD, METAL, true)
-	local leading = c - d
-	local edge = block(parent, name .. "LeadingEdge", Vector3.new(r * 0.031, thickness * 1.15, leading.Magnitude),
-		CFrame.lookAt((c + d) / 2, c, tangent), STEEL:Lerp(WELD, 0.32), METAL, true)
-	if forward then
-		edge:SetAttribute("Heat", 0.5)
-	end
-end
-
-local function bell(parent: Instance, center: Vector3, radius: number, mountY: number, baseY: number)
-	local shoulderY = mountY + (baseY - mountY) * 0.43
-	cylinder(parent, "BellFlare", radius, mountY, shoulderY,
-		NOZZLE, Enum.Material.CorrodedMetal, true, center)
-	cylinder(parent, "BellCollar", radius * 0.70, shoulderY, baseY + 0.32,
-		CHARCOAL:Lerp(NOZZLE, 0.47), METAL, true, center)
 end
 
 local function buildEngines(parent: Instance, opts: Opts)
 	local limit = opts.hullRadius - 6
-	cylinder(parent, "EngineSkirt", limit, opts.baseY - 0.8, opts.baseY + 0.15,
-		CHARCOAL, Enum.Material.DiamondPlate, true)
-	cylinder(parent, "SkirtFlange", limit - 0.23, opts.baseY - 1.2, opts.baseY - 0.69, NOZZLE, METAL, true)
-	for i = 0, 7 do
-		bell(parent, ringPoint(i * 45, limit * 0.74, 0), limit * 0.25, opts.mountY, opts.baseY)
-	end
-	for i = 0, 2 do
-		bell(parent, ringPoint(15 + i * 120, limit * 0.24, 0), limit * 0.17, opts.mountY, opts.baseY)
+	local travel = opts.baseY - opts.mountY
+	for _, row in ipairs({ -1, 1 }) do
+		local z = limit * 0.28 * row
+		local trough = math.max(1.4, 0.24 * travel)
+		local top = opts.baseY + 0.16
+		box(parent, "ThrustCassette", Vector3.new(1.52 * limit, trough, 0.45 * limit),
+			CFrame.new(0, top - trough / 2, z), THERMAL, PLATE, true)
+		for i = -1, 1 do
+			local radius = limit * 0.215
+			if i == 0 then
+				radius = limit * 0.25
+			end
+			cylinder(parent, "EngineBell", radius, i * 0.515 * limit, z, opts.mountY, opts.baseY - 0.9,
+				BRONZE, Enum.Material.CorrodedMetal)
+		end
 	end
 end
 
 function RocketShell.build(rocket: Model, opts: Opts): BasePart
-	local r = opts.hullRadius
-	local lower = cylinder(rocket, "LowerHull", r, opts.baseY, opts.cabinFloorY, STEEL, METAL, true)
-	rocket.PrimaryPart = lower
-	local upper = cylinder(rocket, "UpperHull", r, opts.cabinCeilY, opts.topY, STEEL, METAL, true)
-	upper:SetAttribute("Heat", 0.3)
-	finishHull(rocket, opts)
-	buildNose(rocket, r, opts.topY)
-	for _, angle in ipairs({ 120, 300 }) do
-		flap(rocket, angle, r, opts.topY, true)
-		flap(rocket, angle, r, opts.baseY, false)
-	end
+	local lower = buildLower(rocket, opts)
+	local roofSeat = buildUpper(rocket, opts)
+	buildCrown(rocket, opts, roofSeat)
+	buildWindowFrames(rocket, opts)
 	buildEngines(rocket, opts)
+	rocket.PrimaryPart = lower
 	return lower
 end
 
