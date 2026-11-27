@@ -7,7 +7,7 @@ ROFLY(로블록스FLY) 게임 저장소. [Rojo](https://rojo.space)로 VS Code�
 - 기획서(온라인, 최신본): https://claude.ai/artifact/BPTtwcD7fyrYZ7Ac6vHFE4
 - `docs/concept-images`: 챕터별 콘셉트 이미지 (`old-v1`은 이전 버전)
 - `docs/diagrams`: 로켓 부품 그리드 다이어그램
-- `docs/planets`: 다음 행성 슬롯의 행성 썸네일 원본 (ChatGPT로 생성, 512px 투명 PNG). Roblox에 올린 이미지 ID를 `src/shared/Planets.luau` 의 `Thumb` 에 넣습니다
+- `docs/planets`: 다음 행성 슬롯의 행성 썸네일 원본 (ChatGPT로 생성, 512px 투명 PNG). Roblox에 올린 이미지 ID는 `src/shared/Planets.luau` 의 `Thumb` (그림을 바꾸면 다시 올리고 ID를 바꿈)
 
 ## 폴더 구조
 

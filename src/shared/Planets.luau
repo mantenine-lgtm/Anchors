@@ -5,7 +5,8 @@
 -- 행성을 하나 더 넣으려면 아래 목록에 항목을 하나 더 쓰면 됩니다. (지형지물·소품 종류는 Planet.luau 의 BUILDERS 이름)
 -- 다음 판 행성은 정산 때 슬롯(PlanetSlot.luau)으로 뽑습니다: 지금 행성을 뺀 나머지에서 Weight(가중치) 비율대로.
 -- 가중치는 임시 값입니다 (6종 합 100: 정글·사막·바다 22, 얼음 16, 용암 12, 수정 6 = 희귀).
--- 슬롯 칸의 그림은 Thumb (Roblox 이미지 에셋, 원본은 저장소 docs/planets/). 비어 있으면 행성 색으로 그린 둥근 그림을 씁니다.
+-- 슬롯 칸의 그림은 Thumb (Roblox 이미지 에셋, 원본은 저장소 docs/planets/ 를 2026-11-27 Studio 에셋 관리자로 올림).
+-- 비어 있으면 행성 색으로 그린 둥근 그림을 씁니다. 그림을 바꾸려면 새로 올린 이미지 ID 로 바꿉니다.
 
 local Planets = {}
 
@@ -58,7 +59,7 @@ local LIST: { Planet } = {
 		Id = "lava",
 		Name = "용암 행성",
 		Weight = 12,
-		Thumb = "",
+		Thumb = "rbxassetid://100473538463658",
 		Ground = { rgb(56, 42, 40), rgb(72, 50, 44), rgb(90, 60, 50) },
 		GroundMaterial = Enum.Material.Basalt,
 		Sea = rgb(255, 110, 30),
@@ -90,7 +91,7 @@ local LIST: { Planet } = {
 		Id = "ice",
 		Name = "얼음 행성",
 		Weight = 16,
-		Thumb = "",
+		Thumb = "rbxassetid://95802390756492",
 		Ground = { rgb(198, 218, 234), rgb(220, 234, 246), rgb(238, 246, 255) },
 		GroundMaterial = Enum.Material.Snow,
 		Sea = rgb(120, 188, 236),
@@ -122,7 +123,7 @@ local LIST: { Planet } = {
 		Id = "jungle",
 		Name = "정글 행성",
 		Weight = 22,
-		Thumb = "",
+		Thumb = "rbxassetid://86682571491701",
 		Ground = { rgb(58, 128, 60), rgb(76, 148, 66), rgb(96, 166, 72) },
 		GroundMaterial = Enum.Material.Grass,
 		Sea = rgb(48, 140, 200),
@@ -157,7 +158,7 @@ local LIST: { Planet } = {
 		Id = "desert",
 		Name = "사막 행성",
 		Weight = 22,
-		Thumb = "",
+		Thumb = "rbxassetid://86941930031751",
 		Ground = { rgb(212, 158, 98), rgb(226, 178, 112), rgb(236, 196, 128) },
 		GroundMaterial = Enum.Material.Sand,
 		Sea = rgb(238, 224, 198),
@@ -190,7 +191,7 @@ local LIST: { Planet } = {
 		Id = "crystal",
 		Name = "수정 행성",
 		Weight = 6,
-		Thumb = "",
+		Thumb = "rbxassetid://135627654982822",
 		Ground = { rgb(68, 48, 98), rgb(86, 60, 118), rgb(104, 74, 138) },
 		GroundMaterial = Enum.Material.Slate,
 		Sea = rgb(128, 88, 208),
@@ -222,7 +223,7 @@ local LIST: { Planet } = {
 		Id = "ocean",
 		Name = "바다 행성",
 		Weight = 22,
-		Thumb = "",
+		Thumb = "rbxassetid://103029627584064",
 		Ground = { rgb(226, 210, 150), rgb(120, 180, 90), rgb(92, 150, 72) },
 		GroundMaterial = Enum.Material.Grass,
 		Sea = rgb(40, 130, 210),
