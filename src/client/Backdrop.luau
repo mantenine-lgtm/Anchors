@@ -35,8 +35,8 @@ local STREAK_RADIUS_MAX = 220
 local STREAK_CLEARANCE = 15 -- 바깥 시점 카메라 바로 옆으로는 지나가지 않음
 local CLOUD_COUNT = 9
 
--- 마찰 열: 원래 부품 위에 살짝 큰 빛나는 껍데기를 씌워 달아오르게 보임. 숫자는 부위별 열 비율(코 끝이 가장 뜨거움)
-local HEAT_PARTS = { NoseTip = 1, Nose4 = 1, Nose3 = 0.9, Nose2 = 0.75, Nose1 = 0.6, UpperHull = 0.3 }
+-- 마찰 열: 원래 부품 위에 살짝 큰 빛나는 껍데기를 씌워 달아오르게 보임.
+-- 부위별 열 비율(0~1, 코 끝이 가장 뜨거움)은 선체 파트의 숫자 속성 Heat (server/RocketShell.luau 가 붙임)
 local HEAT_GLOW_ALPHA = 0.9 -- 가장 뜨거울 때 껍데기의 진하기
 local HEAT_PANE_ALPHA = 0.45 -- 외창 바깥면 (선실에서 외창 너머가 붉게 보이는 정도)
 local HEAT_DIM = Color3.fromRGB(150, 26, 8)
@@ -242,23 +242,42 @@ local function findRocketParts()
 			if light then
 				table.insert(lamps, light)
 			end
-		elseif item:IsA("Part") and HEAT_PARTS[item.Name] then
-			-- 마찰 열 껍데기: 같은 모양으로 조금 크게
-			local glow = localPart("HeatGlow", container)
-			glow.Shape = item.Shape
-			glow.Material = Enum.Material.Neon
-			glow.Transparency = 1
-			glow.Size = item.Size + (if item.Shape == Enum.PartType.Ball then Vector3.new(0.8, 0.8, 0.8) else Vector3.new(0.2, 0.8, 0.8))
-			glow.CFrame = item.CFrame
-			table.insert(glows, { part = glow, weight = HEAT_PARTS[item.Name], alpha = HEAT_GLOW_ALPHA })
-			if item.Name == "NoseTip" then
-				local light = Instance.new("PointLight")
-				light.Range = 45
-				light.Brightness = 0
-				light.Shadows = false
-				light.Parent = glow
-				heatLight = light
-			end
+		end
+	end
+	-- 마찰 열 껍데기: Heat 속성이 있는 선체 파트마다 같은 모양(쐐기는 쐐기)으로 조금 크게
+	for _, item in ipairs(rocket:GetDescendants()) do
+		local weight = item:GetAttribute("Heat")
+		if not item:IsA("BasePart") or type(weight) ~= "number" then
+			continue
+		end
+		local glow: BasePart
+		if item:IsA("Part") then
+			local shell = localPart("HeatGlow", container)
+			shell.Shape = item.Shape
+			shell.Size = item.Size + (if item.Shape == Enum.PartType.Cylinder then Vector3.new(0.2, 0.8, 0.8) else Vector3.new(0.8, 0.8, 0.8))
+			glow = shell
+		else
+			glow = Instance.new(item.ClassName) :: BasePart
+			glow.Name = "HeatGlow"
+			glow.Anchored = true
+			glow.CanCollide = false
+			glow.CanQuery = false
+			glow.CanTouch = false
+			glow.CastShadow = false
+			glow.Size = item.Size + Vector3.new(0.8, 0.8, 0.8)
+			glow.Parent = container
+		end
+		glow.Material = Enum.Material.Neon
+		glow.Transparency = 1
+		glow.CFrame = item.CFrame
+		table.insert(glows, { part = glow, weight = math.clamp(weight, 0, 1), alpha = HEAT_GLOW_ALPHA })
+		if item.Name == "NoseTip" and heatLight == nil then
+			local light = Instance.new("PointLight")
+			light.Range = 45
+			light.Brightness = 0
+			light.Shadows = false
+			light.Parent = glow
+			heatLight = light
 		end
 	end
 	-- 외창 바깥면: 유리판마다 선체 바깥면 바로 밖에 빛나는 판 (선실에서는 외창 너머가 붉게, 바깥에서는 외창이 달아올라 보임)

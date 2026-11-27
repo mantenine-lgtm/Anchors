@@ -20,6 +20,19 @@ ROFLY(로블록스FLY) 게임 저장소. [Rojo](https://rojo.space)로 VS Code�
 - **코드는 VS Code에서만 수정.** Studio에서 고친 코드는 파일에 안 남습니다.
 - 맵·모델·UI 배치는 Studio에서 작업하고 `File › Publish to Roblox`로 저장합니다.
 
+## 외형 모델 (GPT가 만든 코드)
+
+로켓 겉면·발사장·행성 소품의 모양은 GPT 최신 모델이 쓴 모듈이 ▶ Play 때 파트로 만듭니다.
+
+| 파일 | 만드는 것 | 폰 사양 한도 |
+|---|---|---|
+| `src/server/RocketShell.luau` | 로켓 겉면 (선체·코·플랩·열 타일·엔진 종) | 파트 180개, 열 빛(`Heat` 속성) 16개 |
+| `src/server/LaunchPad.luau` | 발사장 시설 (발사대·발사탑·탱크·벙커·조명탑·광장 표시) | 파트 90개, 빛 2개 |
+| `src/client/PlanetProps.luau` | 행성 소품 11종·지형지물 8종 | 소품 5개(평균 3.5), 지형지물 16개, 행성마다 500개 |
+
+- 모든 외형은 폰에서도 쉽게 돌아가야 합니다. 위 한도를 넘기지 않습니다.
+- 다른 코드가 이름으로 찾는 파트: `LowerHull`·`UpperHull`·`NoseTip`, `RimLight`·`ControlWindow`·`MastLamp`(안에 SpotLight)·`Mount`·`TowerArm`·`FuelTank`, 소품의 `Pool`·`Cap`·`Crystal`.
+
 ## 처음 세팅 (맥, 1회)
 
 1. **Roblox Studio**: [create.roblox.com](https://create.roblox.com)에서 Studio 다운로드 → 설치 → 로그인
