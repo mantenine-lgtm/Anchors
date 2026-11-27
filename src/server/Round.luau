@@ -176,7 +176,9 @@ local function resetFlightState()
 		state:SetAttribute(Boosters.usedAttribute(info.Id), false)
 		state:SetAttribute(Boosters.byAttribute(info.Id), "")
 		state:SetAttribute(Boosters.untilAttribute(info.Id), -1)
+		state:SetAttribute(Boosters.extraAttribute(info.Id), 0)
 	end
+	state:SetAttribute("GoldenFromKm", -1) -- 황금 항로를 쓴 지점 (안 썼으면 -1)
 	state:SetAttribute("Escaped", false)
 end
 
@@ -362,6 +364,7 @@ local function runBuild(joined: { Player }): any
 			local member = newMember("p" .. tostring(player.UserId), player.DisplayName, player, 0)
 			table.insert(crew, member)
 			byPlayer[player] = member
+			player:SetAttribute("Afk", false) -- 자리 비움(코인 절반)은 판마다 새로 판정
 		end
 	end
 	if #crew == 0 then
@@ -502,6 +505,13 @@ local function syncFlight(round: any)
 	state:SetAttribute("WaveSpeed", sim.w)
 	state:SetAttribute("Boost", sim.boost)
 	state:SetAttribute("Stage", Route.stageIndex(sim.x))
+	-- 부스터마다 지금까지 늘린 거리 (그 부스터 하나만 안 쓴 비행과의 차이). 화면의 코인 연출이 부스터로 더 번 코인을 나눠 보여 줌
+	for _, item in ipairs(round.items) do
+		local shadow = item.shadow
+		if shadow then
+			state:SetAttribute(Boosters.extraAttribute(item.id), math.max(0, sim.x - shadow.x))
+		end
+	end
 end
 
 local function updateCrisis(round: any)
@@ -561,6 +571,10 @@ local function resolveMission(round: any, mission: any): number
 			end
 			if member.noInput >= Config.Mission.AfkMissions then
 				member.afk = true
+				local player = member.player
+				if player then
+					player:SetAttribute("Afk", true) -- 화면의 이번 비행 코인도 절반으로
+				end
 			end
 			if member.noInput >= Config.Mission.AfkMissions then
 				-- 자리 비움: 판정에서 빠짐
@@ -800,6 +814,7 @@ local function useBooster(round: any, member: Member, boosterId: string): (boole
 	FlightSim.applyBooster(sim, boosterId)
 	if boosterId == "Golden" then
 		round.goldenFromKm = sim.x
+		state:SetAttribute("GoldenFromKm", sim.x) -- 화면의 이번 비행 코인도 정산과 같이 계산하도록
 	end
 	local item = {
 		id = boosterId,
@@ -1015,6 +1030,7 @@ local function runResults(round: any)
 			me = {
 				coins = coins,
 				goldenCoins = goldenCoins, -- 코인 중 황금 항로로 더 받은 몫
+				wallet = getNumber(player, "Coins"), -- 정산 코인을 더한 보유 코인 (화면의 보유 코인이 두 번 세지 않게)
 				tickets = tickets,
 				contributionKm = contributions[member.id] or 0,
 				rank = rank, -- 사람끼리의 순위 (영웅 시상과 같은 기준)
@@ -1103,6 +1119,7 @@ local function onPlayerAdded(player: Player)
 	player:SetAttribute("Joined", false)
 	player:SetAttribute("Seat", 0)
 	player:SetAttribute("Captain", false)
+	player:SetAttribute("Afk", false)
 	player:SetAttribute("SpawnIndex", #Players:GetPlayers())
 	-- 시프트 락을 켜면 마우스가 화면 가운데에 묶여 탑승 버튼을 누를 수 없으므로 끔 (이 값은 서버에서만 바꿀 수 있음)
 	pcall(function()
