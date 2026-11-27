@@ -1,6 +1,6 @@
 -- 배경 연출. 로켓은 제자리에 있고 배경이 움직여서 날아가는 것처럼 보입니다.
 -- 선실 외창 너머로 보이는 것과 바깥 시점에서 보이는 것은 모두 같은 물체입니다(시점마다 따로 두지 않음).
---  · 발사장: 고도만큼 아래로 내려가다가, 멀어지면 작아지며 사라짐
+--  · 발사 행성과 발사장은 Planet.luau 가 움직임. 고향 하늘(1단계) 빛은 판마다 바뀌는 행성의 하늘(Planets.luau)
 --  · 충격파: 아래에서 올라오는 빛나는 판. 도달 예상 시간이 줄수록 가까이 옴
 --  · 대기권(100 km까지): 마찰로 코와 외창 바깥면이 빨갛게 달아오름(빠를수록 셈). 화면 흔들림은 CameraRig
 --  · 별빛 줄기: 대기권을 벗어난 뒤에만, 속도가 빠를수록 빠르게 아래로 흐름 (발사 전에는 천천히 떠오르는 불티)
@@ -14,6 +14,7 @@ local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared:WaitForChild("Config"))
+local Planets = require(Shared:WaitForChild("Planets"))
 local Route = require(Shared:WaitForChild("Route"))
 
 local State = require(script.Parent:WaitForChild("State"))
@@ -22,10 +23,6 @@ local Backdrop = {}
 
 local W = Config.World
 local random = Random.new()
-
--- 이 깊이까지는 실제 높이대로 내려가고, 그 뒤로는 작아짐 (너무 아래로 내려간 파트는 엔진이 지우기 때문)
-local PAD_DROP_LIMIT = 400
-local PAD_MIN_SCALE = 0.02
 
 -- 별빛 줄기: 로켓을 빙 두른 한 무리. 외창 너머로 보이는 줄기도 바깥 시점에서 보이는 줄기도 같은 것입니다.
 -- 고르게 퍼져 있어서 외창 너머로는 한 번에 8개쯤 보입니다(예전 앞쪽 무리는 20개쯤).
@@ -90,10 +87,6 @@ local SKIES: { Sky } = {
 }
 
 local container: Folder
-local pad: Model? = nil
-local padHome: CFrame = CFrame.new()
-local padMoved = false
-local padHidden = false
 
 local wave: Part
 local waveY = -440
@@ -238,11 +231,6 @@ end
 
 local function findRocketParts()
 	local rofly = Workspace:WaitForChild("Rofly")
-	local foundPad = rofly:WaitForChild("Pad")
-	if foundPad:IsA("Model") then
-		pad = foundPad
-		padHome = foundPad:GetPivot()
-	end
 	local rocket = rofly:WaitForChild("Rocket")
 	rocket:WaitForChild("NoseTip", 10)
 	local walls = rocket:WaitForChild("Walls", 10)
@@ -291,55 +279,14 @@ local function findRocketParts()
 	end
 end
 
--- ------------------------------------------------------------ 발사장
-local function setPadHidden(hidden: boolean)
-	if padHidden == hidden or not pad then
-		return
-	end
-	padHidden = hidden
-	for _, item in ipairs(pad:GetDescendants()) do
-		if item:IsA("BasePart") then
-			item.LocalTransparencyModifier = if hidden then 1 else 0
-		end
-	end
-end
-
-local function resetPad()
-	if not pad or not padMoved then
-		return
-	end
-	padMoved = false
-	pad:ScaleTo(1)
-	pad:PivotTo(padHome)
-	setPadHidden(false)
-end
-
-local function movePad(altitudeStuds: number)
-	if not pad then
-		return
-	end
-	padMoved = true
-	if altitudeStuds <= PAD_DROP_LIMIT then
-		setPadHidden(false)
-		if pad:GetScale() ~= 1 then
-			pad:ScaleTo(1)
-		end
-		pad:PivotTo(padHome * CFrame.new(0, -altitudeStuds, 0))
-		return
-	end
-	local scale = PAD_DROP_LIMIT / altitudeStuds
-	if scale < PAD_MIN_SCALE then
-		setPadHidden(true)
-		return
-	end
-	setPadHidden(false)
-	pad:ScaleTo(scale)
-	pad:PivotTo(padHome * CFrame.new(0, -PAD_DROP_LIMIT, 0))
-end
-
 -- ------------------------------------------------------------ 하늘
 local function lerpNumber(a: number, b: number, t: number): number
 	return a + (b - a) * t
+end
+
+-- 고향 하늘(1단계): 이번 판 행성의 하늘
+local function homeSky(): Sky
+	return Planets.get(State.text("Planet")).Sky
 end
 
 local function blendSky(target: Sky, t: number)
@@ -443,6 +390,7 @@ function Backdrop.init()
 		end
 	end
 
+	sky = table.clone(homeSky())
 	buildWave()
 	buildFlame()
 	buildStreaks()
@@ -472,16 +420,9 @@ function Backdrop.update(dt: number)
 	local f = State.flight
 	local crisis = flying and State.flag("Crisis")
 
-	-- 발사장
-	if flying or (phase == "Results" and padMoved) then
-		movePad(f.km * 1000 * W.StudsPerMeter)
-	else
-		resetPad()
-	end
-
 	-- 하늘
 	local stage = if flying or phase == "Results" then math.min(Route.stageIndex(f.km), #SKIES) else 1
-	blendSky(SKIES[stage], math.min(1, dt * 0.9))
+	blendSky(if stage == 1 then homeSky() else SKIES[stage], math.min(1, dt * 0.9))
 	local flashBoost = 0
 	if flying and stage == 2 then
 		if clock >= nextLightning then

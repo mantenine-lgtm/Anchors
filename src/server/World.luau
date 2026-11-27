@@ -1,6 +1,7 @@
--- 회색 상자 월드를 코드로 만듭니다: 발사장, 로켓, 선실(외창·전광판), 좌석.
+-- 회색 상자 월드를 코드로 만듭니다: 발사 광장, 로켓, 선실(외창·전광판), 좌석.
 -- 맵을 Studio 에서 따로 만들지 않아도 Play 만 누르면 생깁니다.
--- 로켓은 원점에 고정이고, 비행 중에는 클라이언트가 배경(발사장·별)을 움직입니다.
+-- 로켓은 원점에 고정이고, 비행 중에는 클라이언트가 배경(행성·발사 광장·별)을 움직입니다.
+-- 광장 밖의 둥근 행성과 지형지물은 판마다 바뀌며 클라이언트가 만듭니다(client/Planet.luau).
 
 local Lighting = game:GetService("Lighting")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -17,12 +18,19 @@ local STEEL_DARK = Color3.fromRGB(120, 126, 136)
 local DARK = Color3.fromRGB(52, 56, 64)
 local FLOOR = Color3.fromRGB(70, 74, 84)
 local GLASS = Color3.fromRGB(170, 215, 255)
-local GROUND = Color3.fromRGB(84, 78, 74)
-local CRACK = Color3.fromRGB(255, 110, 40)
+local PLAZA = Color3.fromRGB(96, 100, 110)
+local PLAZA_EDGE = Color3.fromRGB(62, 66, 76)
+local MARK = Color3.fromRGB(255, 196, 60)
+local RIM_LIGHT = Color3.fromRGB(90, 230, 255)
+local TANK = Color3.fromRGB(226, 230, 236)
+local STRIPE = Color3.fromRGB(255, 120, 40)
 local SEAT = Color3.fromRGB(78, 84, 98)
 local CUSHION = Color3.fromRGB(40, 44, 54)
 local GOLD = Color3.fromRGB(255, 205, 60)
 local TOWER = Color3.fromRGB(120, 60, 54)
+
+-- 발사 광장: 행성 꼭대기 면(가장자리까지 약 187 스터드) 안에 들어가는 둥근 판. 윗면 y = 0
+local PLAZA_RADIUS = 150
 
 local rocket: Model? = nil
 local seatsFolder: Folder? = nil
@@ -59,6 +67,13 @@ local function cylinder(parent: Instance, name: string, radius: number, y0: numb
 	return p
 end
 
+-- 세로 원기둥을 (x, z) 자리에
+local function post(parent: Instance, name: string, x: number, z: number, radius: number, y0: number, y1: number, color: Color3, material: Enum.Material?): Part
+	local p = cylinder(parent, name, radius, y0, y1, color, material)
+	p.CFrame = CFrame.new(x, (y0 + y1) / 2, z) * CFrame.Angles(0, 0, math.rad(90))
+	return p
+end
+
 -- 각도(도)와 반지름으로 로켓 둘레의 한 점. 0도 = +Z(외창 쪽), 180도 = -Z(좌석 쪽)
 local function ringPoint(angleDeg: number, radius: number, y: number): Vector3
 	local theta = math.rad(angleDeg)
@@ -76,23 +91,95 @@ local function wallPanel(parent: Instance, name: string, angleDeg: number, y0: n
 	return p
 end
 
+-- 빛나는 장식 파트 (부딪히지 않고 그림자 없음)
+local function glow(part: Part): Part
+	part.CanCollide = false
+	part.CastShadow = false
+	return part
+end
+
+-- 연료 탱크: 세로 원통 + 둥근 지붕 + 주황 띠
+local function fuelTank(parent: Instance, angleDeg: number, radius: number, size: number)
+	local at = ringPoint(angleDeg, radius, 0)
+	local height = 34 * size
+	local r = 11 * size
+	post(parent, "FuelTank", at.X, at.Z, r, 0, height, TANK, Enum.Material.Metal)
+	post(parent, "TankStripe", at.X, at.Z, r + 0.3, height * 0.55, height * 0.55 + 3, STRIPE, Enum.Material.SmoothPlastic)
+	local dome = Instance.new("Part")
+	dome.Name = "TankDome"
+	dome.Shape = Enum.PartType.Ball
+	dome.Anchored = true
+	dome.Material = Enum.Material.Metal
+	dome.Color = TANK
+	dome.Size = Vector3.new(r * 2, r * 2, r * 2)
+	dome.CFrame = CFrame.new(at.X, height, at.Z)
+	dome.Parent = parent
+	-- 발사대 쪽으로 가는 배관
+	local toward = Vector3.new(-at.X, 0, -at.Z).Unit
+	local from = at + toward * r
+	local to = toward * (W.MountRadius + 2)
+	local middle = (from + to) / 2 + Vector3.new(0, 1.5, 0)
+	block(parent, "Pipe", Vector3.new(2, 2, (to - from).Magnitude), CFrame.lookAt(middle, middle + toward), STEEL_DARK, Enum.Material.Metal)
+end
+
+-- 조명탑: 가는 기둥 위에 빛나는 등
+local function lightMast(parent: Instance, angleDeg: number, radius: number)
+	local at = ringPoint(angleDeg, radius, 0)
+	post(parent, "Mast", at.X, at.Z, 1.4, 0, 84, STEEL_DARK, Enum.Material.Metal)
+	local facing = CFrame.lookAt(Vector3.new(at.X, 86, at.Z), Vector3.new(0, 60, 0))
+	block(parent, "MastHead", Vector3.new(9, 4, 2), facing, DARK, Enum.Material.Metal)
+	local lamp = glow(block(parent, "MastLamp", Vector3.new(8, 3, 0.4), facing * CFrame.new(0, 0, -1.1), Color3.fromRGB(255, 244, 214), Enum.Material.Neon))
+	local light = Instance.new("SpotLight")
+	light.Angle = 70
+	light.Range = 60
+	light.Brightness = 1.5
+	light.Color = Color3.fromRGB(255, 236, 200)
+	light.Face = Enum.NormalId.Front
+	light.Shadows = false
+	light.Parent = lamp
+end
+
+-- 관제실: 낮은 건물 + 빛나는 창 + 안테나
+local function controlRoom(parent: Instance, angleDeg: number, radius: number)
+	local at = ringPoint(angleDeg, radius, 0)
+	local facing = CFrame.lookAt(Vector3.new(at.X, 0, at.Z), Vector3.new(0, 0, 0))
+	block(parent, "ControlRoom", Vector3.new(34, 14, 20), facing * CFrame.new(0, 7, 0), PLAZA_EDGE, Enum.Material.Concrete)
+	block(parent, "ControlRoof", Vector3.new(36, 2, 22), facing * CFrame.new(0, 15, 0), DARK, Enum.Material.Metal)
+	glow(block(parent, "ControlWindow", Vector3.new(26, 3, 0.4), facing * CFrame.new(0, 9, -10.1), RIM_LIGHT, Enum.Material.Neon))
+	block(parent, "Antenna", Vector3.new(1, 22, 1), facing * CFrame.new(11, 27, 4), STEEL_DARK, Enum.Material.Metal)
+	glow(block(parent, "AntennaLamp", Vector3.new(1.6, 1.6, 1.6), facing * CFrame.new(11, 38.5, 4), STRIPE, Enum.Material.Neon))
+end
+
 local function buildPad(parent: Instance): Model
 	local model = Instance.new("Model")
 	model.Name = "Pad"
 
-	local ground = block(model, "Ground", Vector3.new(W.GroundSize, 4, W.GroundSize), CFrame.new(0, -2, 0), GROUND, Enum.Material.Slate)
-	model.PrimaryPart = ground
-
-	-- 붕괴 조짐: 땅의 빛나는 균열
-	local random = Random.new(7)
-	for i = 1, 14 do
-		local angle = (i / 14) * math.pi * 2 + random:NextNumber() * 0.3
-		local length = 160 + random:NextNumber() * 420
-		local distance = 70 + length / 2
-		local position = Vector3.new(math.sin(angle) * distance, 0.06, math.cos(angle) * distance)
-		local crack = block(model, "Crack", Vector3.new(2 + random:NextNumber() * 3, 0.2, length), CFrame.new(position) * CFrame.Angles(0, angle, 0), CRACK, Enum.Material.Neon)
-		crack.CanCollide = false
-		crack.CastShadow = false
+	-- 발사 광장 (행성 꼭대기 면에 조금 묻힘. 광장 밖 땅과 지형지물은 클라이언트가 만드는 행성)
+	local plaza = cylinder(model, "Plaza", PLAZA_RADIUS, -14, 0, PLAZA, Enum.Material.Concrete)
+	model.PrimaryPart = plaza
+	cylinder(model, "PlazaEdge", PLAZA_RADIUS + 3, -16, -0.6, PLAZA_EDGE, Enum.Material.Concrete)
+	-- 발사대 둘레 표시: 노란 고리
+	glow(cylinder(model, "PadMark", W.MountRadius + 10, 0, 0.1, MARK, Enum.Material.SmoothPlastic))
+	glow(cylinder(model, "PadMarkInner", W.MountRadius + 6, 0, 0.16, PLAZA_EDGE, Enum.Material.Concrete))
+	-- 광장 가장자리 불빛
+	for i = 0, 23 do
+		local angle = i * 15 + 7.5
+		local at = ringPoint(angle, PLAZA_RADIUS - 3, 0.3)
+		glow(block(model, "RimLight", Vector3.new(3, 0.6, 1.2), CFrame.new(at) * CFrame.Angles(0, math.rad(angle), 0), RIM_LIGHT, Enum.Material.Neon))
+	end
+	-- 기지 시설: 로켓 뒤쪽(바깥 시점에서 보이는 쪽)에 연료 탱크와 관제실, 둘레에 조명탑
+	fuelTank(model, 215, 104, 1)
+	fuelTank(model, 240, 112, 0.8)
+	fuelTank(model, 192, 116, 0.7)
+	controlRoom(model, 285, 112)
+	lightMast(model, 150, 128)
+	lightMast(model, 255, 134)
+	lightMast(model, 330, 128)
+	-- 리스폰 옆 짐 상자
+	for i, spot in ipairs({ { 24, 118 }, { 30, 126 }, { -26, 120 } }) do
+		local at = ringPoint(spot[1], spot[2], 0)
+		local size = if i == 2 then 6 else 8
+		block(model, "Crate", Vector3.new(size, size, size), CFrame.new(at + Vector3.new(0, size / 2, 0)) * CFrame.Angles(0, math.rad(spot[1] + 10 * i), 0), Color3.fromRGB(150, 110, 70), Enum.Material.WoodPlanks)
 	end
 
 	cylinder(model, "Mount", W.MountRadius, 0, W.MountHeight, STEEL_DARK, Enum.Material.Concrete)

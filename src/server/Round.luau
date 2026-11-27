@@ -12,6 +12,7 @@ local FlightSim = require(Shared:WaitForChild("FlightSim"))
 local Missions = require(Shared:WaitForChild("Missions"))
 local Net = require(Shared:WaitForChild("Net"))
 local Parts = require(Shared:WaitForChild("Parts"))
+local Planets = require(Shared:WaitForChild("Planets"))
 local Route = require(Shared:WaitForChild("Route"))
 local Scoring = require(Shared:WaitForChild("Scoring"))
 
@@ -84,6 +85,23 @@ end
 local function setPhase(name: string, duration: number)
 	state:SetAttribute("PhaseEndsAt", if duration > 0 then now() + duration else 0)
 	state:SetAttribute("Phase", name)
+end
+
+-- 발사 행성을 바꿈: 종류(Planet)를 먼저, 배치 씨앗(PlanetSeed)을 나중에 씀.
+-- 클라이언트는 씨앗이 바뀌면 그때의 종류로 행성을 다시 만듭니다(씨앗이 같으면 모두 같은 행성).
+local function setPlanet(planet: Planets.Planet)
+	local previous = getNumber(state, "PlanetSeed")
+	local seed = rng:NextInteger(1, 999999)
+	if seed == previous then
+		seed = seed % 999999 + 1
+	end
+	state:SetAttribute("Planet", planet.Id)
+	state:SetAttribute("PlanetSeed", seed)
+end
+
+local function currentPlanetId(): string
+	local id = state:GetAttribute("Planet")
+	return if typeof(id) == "string" then id else ""
 end
 
 local function consumeSkip(): boolean
@@ -836,6 +854,8 @@ local function cleanup()
 	state:SetAttribute("CaptainSeat", 0)
 	resetFlightState()
 	Seating.releaseAll()
+	-- 다음 판은 다른 행성에서 (모두 발사장으로 돌아간 뒤에 바꿈)
+	setPlanet(Planets.pick(currentPlanetId(), rng))
 end
 
 local function runRound()
@@ -986,6 +1006,7 @@ function Round.start()
 	showBuild(nil, "")
 	resetFlightState()
 	showOptions()
+	setPlanet(Planets.pick("", rng))
 	state.Parent = ReplicatedStorage
 
 	connectRemotes()
@@ -1009,6 +1030,13 @@ end
 
 function Round.skip()
 	skipRequested = true
+end
+
+-- 목록 순서대로 다음 행성으로 바꾸고 그 이름을 돌려줌 (디버그 패널에서 행성을 하나씩 넘겨 볼 때)
+function Round.nextPlanet(): string
+	local planet = Planets.after(currentPlanetId())
+	setPlanet(planet)
+	return planet.Name
 end
 
 function Round.setBotFill(count: number)

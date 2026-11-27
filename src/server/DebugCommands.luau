@@ -63,6 +63,8 @@ local function handle(player: Player, command: any, value: any)
 		else
 			reply(player, "비행 중에만 쓸 수 있습니다")
 		end
+	elseif command == "Planet" then
+		reply(player, "행성을 바꿨습니다: " .. Round.nextPlanet())
 	elseif command == "Metrics" then
 		Metrics.print()
 		reply(player, Metrics.summary())
