@@ -1,5 +1,5 @@
--- 비행 화면(HUD): 위쪽 안내, 탑승 버튼, 거리·속도·연료·충격파, 위기 경고, 구원 연료, 감사 버튼,
--- 선장 발사 버튼, 정산 화면, 한 줄 안내.
+-- 비행 화면(HUD): 위쪽 안내, 탑승 버튼, 거리·속도·연료·충격파, 위기 경고, 부스터 사용 알림, 감사 버튼,
+-- 선장 발사 버튼, 정산 화면, 한 줄 안내. 부스터 버튼(왼쪽 메뉴)은 BoosterMenu 가 그립니다.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -8,12 +8,14 @@ local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Boosters = require(Shared:WaitForChild("Boosters"))
 local Config = require(Shared:WaitForChild("Config"))
 local FlightSim = require(Shared:WaitForChild("FlightSim"))
 local Fmt = require(Shared:WaitForChild("Fmt"))
 local Net = require(Shared:WaitForChild("Net"))
 local Route = require(Shared:WaitForChild("Route"))
 
+local BoosterMenu = require(script.Parent:WaitForChild("BoosterMenu"))
 local State = require(script.Parent:WaitForChild("State"))
 local Ui = require(script.Parent:WaitForChild("Ui"))
 
@@ -55,9 +57,6 @@ local ghostNote: TextLabel
 local crisisBorder: Frame
 local crisisEdges: { Frame } = {}
 local crisisLabel: TextLabel
-local rescueButton: TextButton
-local rescueSent = false
-local rescueSentAt = 0
 
 -- 아이템 알림과 감사
 local itemBanner: TextLabel
@@ -227,11 +226,14 @@ local function statLine(parent: Instance, name: string, y: number, title: string
 	})
 end
 
+-- 비행 정보 판(속도·연료·콤보)은 왼쪽 끝의 부스터 메뉴 바로 오른쪽에
+local LEFT_PANEL_X = BoosterMenu.Left + BoosterMenu.Width + 12
+
 local function buildFlightPanels()
 	leftPanel = Ui.panel(root, "FlightLeft", {
 		AnchorPoint = Vector2.new(0, 0.5),
-		Position = UDim2.new(0, 16, 0.4, 0),
-		Size = UDim2.fromOffset(236, 232),
+		Position = UDim2.new(0, LEFT_PANEL_X, 0.4, 0),
+		Size = UDim2.fromOffset(204, 232),
 		Visible = false,
 	})
 	speedLabel = statLine(leftPanel, "Speed", 8, "속도")
@@ -306,27 +308,6 @@ local function buildCrisis()
 	edge("Bottom", Vector2.new(0, 1), UDim2.fromScale(0, 1), UDim2.new(1, 0, 0, thickness))
 	edge("Left", Vector2.new(0, 0), UDim2.fromOffset(0, thickness), UDim2.new(0, thickness, 1, -thickness * 2))
 	edge("Right", Vector2.new(1, 0), UDim2.new(1, 0, 0, thickness), UDim2.new(0, thickness, 1, -thickness * 2))
-	rescueButton = Ui.button(root, "RescueButton", "", 26, C.Orange, {
-		AnchorPoint = Vector2.new(0.5, 1),
-		Position = UDim2.new(0.5, 0, 1, -196),
-		Size = UDim2.fromOffset(400, 68),
-		Visible = false,
-	})
-	Ui.stroke(rescueButton, C.White, 3, 0.3)
-	rescueButton.Activated:Connect(function()
-		if rescueSent then
-			return
-		end
-		if State.myNumber("Tickets") < Config.Rescue.TicketCost then
-			toast("티켓이 없습니다. 티켓은 시상(영웅·미션왕·구원자)으로 받습니다.")
-			State.emit("Sound", "Wrong")
-			return
-		end
-		rescueSent = true
-		rescueSentAt = os.clock()
-		State.emit("Sound", "Press")
-		Net.event("UseItem"):FireServer("RescueFuel")
-	end)
 end
 
 local function buildItem()
@@ -338,7 +319,7 @@ local function buildItem()
 		TextStrokeTransparency = 0.2,
 		Visible = false,
 	})
-	-- 감사 버튼은 구원 연료 버튼이 있던 자리(미션 판 바로 위)에 뜸
+	-- 감사 버튼은 미션 판 바로 위에 뜸
 	thanksButton = Ui.button(root, "ThanksButton", "고마워요!", 30, C.Pink, {
 		AnchorPoint = Vector2.new(0.5, 1),
 		Position = UDim2.new(0.5, 0, 1, -196),
@@ -545,10 +526,12 @@ local function fillResults(data: any)
 	y += 40
 	local savior = common.savior
 	local saviorText = "없음"
+	local botSave = common.botSave
 	if savior then
-		saviorText = string.format("%s · 구원 연료로 +%s · 감사 %d", savior.name, Fmt.km(savior.extra), savior.value)
-	elseif common.itemKm > 0 then
-		saviorText = string.format("봇의 구원 연료로 +%s", Fmt.km(common.itemKm))
+		local item = if type(common.saviorItem) == "string" and common.saviorItem ~= "" then common.saviorItem else "부스터"
+		saviorText = string.format("%s · %s +%s · 감사 %d", savior.name, Fmt.josa(item, "으로", "로"), Fmt.km(savior.extra), savior.value)
+	elseif type(botSave) == "table" and botSave.km > 0 then
+		saviorText = string.format("봇의 %s +%s", Fmt.josa(botSave.item, "으로", "로"), Fmt.km(botSave.km))
 	end
 	resultRow(resultsPanel, y, "구원자", saviorText, if savior then C.Pink else C.Dim, 26)
 	y += 52
@@ -582,6 +565,9 @@ local function fillResults(data: any)
 			y += 44
 		end
 		local reward = string.format("코인 +%s", Fmt.comma(me.coins))
+		if type(me.goldenCoins) == "number" and me.goldenCoins > 0 then
+			reward ..= string.format(" (황금 항로 +%s)", Fmt.comma(me.goldenCoins))
+		end
 		if me.tickets > 0 then
 			reward ..= string.format(" · 티켓 +%d", me.tickets)
 		end
@@ -671,12 +657,25 @@ local function onLaunched(info: any)
 end
 
 local function onItemUsed(info: any)
-	itemBanner.Text = string.format("%s 님이 구원 연료를 썼습니다!", info.name)
+	if type(info) ~= "table" then
+		return
+	end
+	local booster = Boosters.get(info.item)
+	local itemName = if booster then booster.Name else "부스터"
+	itemBanner.Text = string.format("%s 님이 %s 썼습니다!", tostring(info.name), Fmt.josa(itemName, "을", "를"))
 	itemBanner.Visible = true
 	itemBannerUntil = os.clock() + info.thanksSeconds + 1
 	thanksCount.Text = ""
 	thanksCount.Visible = true
-	flash(C.Orange, 0.5, 0.8)
+	if booster then
+		toast(string.format("%s: %s", booster.Name, booster.Desc), 4)
+	end
+	if info.item == "Wormhole" then
+		-- 웜홀만의 워프 연출: 길고 밝게
+		flash(C.Purple, 0.85, 1.6)
+	else
+		flash(if booster then BoosterMenu.colorOf(booster.Id) else C.Orange, 0.5, 0.8)
+	end
 	if info.userId ~= player.UserId or info.isBot then
 		thanksButton.Visible = true
 		thanksUntil = os.clock() + info.thanksSeconds
@@ -845,22 +844,6 @@ local function updateFlight()
 		end
 		crisisLabel.Text = string.format("충격파 접근! 약 %d초 뒤 도달", math.ceil(eta))
 	end
-	-- 서버가 받아 주지 않았으면(위기가 막 끝났을 때 등) 잠시 뒤 버튼을 다시 보여 줌
-	if rescueSent and not State.flag("ItemUsed") and os.clock() - rescueSentAt > 1.5 then
-		rescueSent = false
-	end
-	local canRescue = crisis and not State.flag("ItemUsed") and State.role() == "Crew" and not rescueSent
-	rescueButton.Visible = canRescue
-	if canRescue then
-		local tickets = State.myNumber("Tickets")
-		if tickets >= Config.Rescue.TicketCost then
-			rescueButton.Text = string.format("구원 연료 사용 · 티켓 %d장", Config.Rescue.TicketCost)
-			rescueButton.BackgroundColor3 = C.Orange
-		else
-			rescueButton.Text = "구원 연료 · 티켓 없음"
-			rescueButton.BackgroundColor3 = C.PanelLight
-		end
-	end
 end
 
 local function updateLaunch()
@@ -924,7 +907,6 @@ function Hud.update(_dt: number)
 	else
 		crisisBorder.Visible = false
 		crisisLabel.Visible = false
-		rescueButton.Visible = false
 	end
 	ghostNote.Visible = State.role() == "Ghost" and (phase == "Build" or phase == "Countdown" or phase == "Flight")
 
@@ -1025,8 +1007,6 @@ function Hud.init()
 	State.on("Phase", function(phase: string)
 		if phase == "Countdown" then
 			launchSent = false
-		elseif phase == "Flight" then
-			rescueSent = false
 		elseif phase == "Join" then
 			resultsData = nil
 			resultsBuilt = false

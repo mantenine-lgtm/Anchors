@@ -7,6 +7,7 @@ local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Boosters = require(Shared:WaitForChild("Boosters"))
 local Config = require(Shared:WaitForChild("Config"))
 local FlightSim = require(Shared:WaitForChild("FlightSim"))
 local Missions = require(Shared:WaitForChild("Missions"))
@@ -123,7 +124,12 @@ local function resetFlightState()
 	state:SetAttribute("FuelTime", 0)
 	state:SetAttribute("SailTime", 0)
 	state:SetAttribute("RescueUntil", -1)
-	state:SetAttribute("ItemUsed", false)
+	state:SetAttribute("ItemUsed", false) -- 이번 비행에 부스터를 하나라도 썼는지
+	for _, info in ipairs(Boosters.List) do
+		state:SetAttribute(Boosters.usedAttribute(info.Id), false)
+		state:SetAttribute(Boosters.byAttribute(info.Id), "")
+		state:SetAttribute(Boosters.untilAttribute(info.Id), -1)
+	end
 	state:SetAttribute("Escaped", false)
 end
 
@@ -326,9 +332,11 @@ local function runBuild(joined: { Player }): any
 		launchQuality = "auto",
 		captainBonus = 0,
 		sim = nil,
-		shadow = nil,
 		mission = nil,
-		item = nil,
+		items = {}, -- 이번 비행에 쓴 부스터 (쓴 순서)
+		used = {}, -- 부스터 Id -> 쓴 기록 (종류마다 한 번)
+		lastItem = nil, -- 감사 버튼이 가리키는 마지막 부스터
+		goldenFromKm = nil, -- 황금 항로를 쓴 지점 (km)
 		missionCount = 0,
 		rateSum = 0,
 		humanAttempts = 0,
@@ -501,6 +509,16 @@ local function broadcastMissionResult(round: any, mission: any, rate: number)
 	end
 end
 
+-- 부스터마다 '그 부스터 하나만 안 쓴' 비행을 같이 진행 (정산 때 부스터로 늘린 거리를 알기 위해)
+local function stepShadows(round: any, rate: number?)
+	for _, item in ipairs(round.items) do
+		local shadow = item.shadow
+		if shadow and not shadow.ended then
+			FlightSim.step(shadow, rate)
+		end
+	end
+end
+
 local function runFlight(round: any)
 	local sim = FlightSim.new(round.totals, round.captainBonus)
 	round.sim = sim
@@ -543,10 +561,7 @@ local function runFlight(round: any)
 					resolveAt = Missions.resolveTime(missionIndex)
 				end
 				FlightSim.step(sim, autoRate)
-				local shadowSim = round.shadow
-				if shadowSim and not shadowSim.ended then
-					FlightSim.step(shadowSim, autoRate)
-				end
+				stepShadows(round, autoRate)
 				steps += 1
 			end
 			-- 다음 미션은 제한 시간을 온전히 주고 시작
@@ -576,10 +591,7 @@ local function runFlight(round: any)
 				resolveAt = Missions.resolveTime(missionIndex)
 			end
 			FlightSim.step(sim, rate)
-			local shadow = round.shadow
-			if shadow and not shadow.ended then
-				FlightSim.step(shadow, rate)
-			end
+			stepShadows(round, rate)
 			if resolved ~= nil and rate ~= nil then
 				broadcastMissionResult(round, resolved, rate)
 			end
@@ -609,42 +621,86 @@ local function runFlight(round: any)
 	})
 end
 
--- 구원 연료 사용. 위기 구간에서, 한 비행에 로켓 전체로 한 번만.
-local function useRescue(round: any, member: Member): boolean
-	local sim = round.sim
-	if sim == nil or sim.ended or round.item ~= nil then
-		return false
+-- 부스터 효과가 끝나는 비행 시각 (시간이 정해진 것만, 아니면 -1)
+local function boosterUntil(sim: any, boosterId: string): number
+	if boosterId == "RescueFuel" then
+		return sim.rescueUntil
+	elseif boosterId == "Turbo" then
+		return sim.turboUntil
+	elseif boosterId == "Resonance" then
+		return sim.resonanceUntil
 	end
-	if state:GetAttribute("Phase") ~= "Flight" or state:GetAttribute("Crisis") ~= true then
-		return false
+	return -1
+end
+
+-- 부스터 사용. 종류마다 한 비행에 로켓 전체로 한 번 (먼저 누른 사람). 구원 연료는 위기 구간에서만.
+-- 쓰면 true. 못 쓰면 false 와 까닭 (사람에게 알려 줄 글, 알릴 것이 없으면 nil).
+local function useBooster(round: any, member: Member, boosterId: string): (boolean, string?)
+	local info = Boosters.get(boosterId)
+	local sim = round.sim
+	if info == nil or sim == nil or sim.ended or round.ended then
+		return false, nil
+	end
+	if state:GetAttribute("Phase") ~= "Flight" then
+		return false, nil
+	end
+	local usedBefore = round.used[boosterId]
+	if usedBefore ~= nil then
+		return false, string.format("%s: %s 님이 이미 썼습니다", info.Name, usedBefore.member.name)
+	end
+	local crisis = state:GetAttribute("Crisis") == true
+	if boosterId == "RescueFuel" and not crisis then
+		return false, "구원 연료는 위기 때만 쓸 수 있습니다"
 	end
 	local player = member.player
 	if player then
 		local tickets = getNumber(player, "Tickets")
-		if tickets < Config.Rescue.TicketCost then
-			return false
+		if tickets < info.Cost then
+			return false, "티켓이 없습니다. 티켓은 시상으로 받습니다"
 		end
-		player:SetAttribute("Tickets", tickets - Config.Rescue.TicketCost)
-		round.ticketsUsed += Config.Rescue.TicketCost
+		player:SetAttribute("Tickets", tickets - info.Cost)
+		round.ticketsUsed += info.Cost
 	end
 
-	-- 안 썼을 때의 거리를 알기 위해 그림자 계산을 따로 이어 감
-	round.shadow = FlightSim.clone(sim)
-	FlightSim.rescue(sim)
+	-- 이 부스터 하나만 안 썼을 때의 비행을 따로 이어 감 (황금 항로는 거리를 바꾸지 않아 필요 없음).
+	-- 먼저 쓴 부스터들의 그림자에는 이 부스터를 넣어서, 그림자마다 '그 부스터 하나만 뺀' 비행이 되게 함.
+	local shadow = if boosterId == "Golden" then nil else FlightSim.clone(sim)
+	for _, other in ipairs(round.items) do
+		local otherShadow = other.shadow
+		if otherShadow and not otherShadow.ended then
+			FlightSim.applyBooster(otherShadow, boosterId)
+		end
+	end
+	FlightSim.applyBooster(sim, boosterId)
+	if boosterId == "Golden" then
+		round.goldenFromKm = sim.x
+	end
 	local item = {
+		id = boosterId,
+		name = info.Name,
 		member = member,
 		at = sim.t,
+		inCrisis = crisis,
+		shadow = shadow,
+		km = 0, -- 정산 때 계산: 이 부스터로 늘린 거리
 		thanks = {}, -- UserId -> 눌렀는지
 		thanksCount = 0, -- 하트 수 (봇 포함)
 		humanThanks = 0,
 		thanksUntil = now() + Config.Rescue.ThanksWindow + Config.Rescue.ThanksGrace,
 	}
-	round.item = item
+	table.insert(round.items, item)
+	round.used[boosterId] = item
+	round.lastItem = item
 	state:SetAttribute("ItemUsed", true)
+	state:SetAttribute(Boosters.usedAttribute(boosterId), true)
+	state:SetAttribute(Boosters.byAttribute(boosterId), member.name)
+	state:SetAttribute(Boosters.untilAttribute(boosterId), boosterUntil(sim, boosterId))
 	state:SetAttribute("RescueUntil", sim.rescueUntil)
+	syncFlight(round) -- 웜홀·새총은 거리·속도가 바로 바뀜
 	updateCrisis(round)
 	Net.event("ItemUsed"):FireAllClients({
-		item = "RescueFuel",
+		item = boosterId,
+		itemName = info.Name,
 		name = member.name,
 		userId = member.userId,
 		seat = member.seat,
@@ -652,12 +708,12 @@ local function useRescue(round: any, member: Member): boolean
 		thanksSeconds = Config.Rescue.ThanksWindow,
 	})
 
-	-- 봇도 하트를 보냄 (연출용, 지표에는 세지 않음)
+	-- 봇도 하트를 보냄 (연출용, 지표에는 세지 않음). 다음 부스터가 쓰이면 그쪽으로 넘어감
 	for _, other: Member in ipairs(round.crew) do
 		if other.isBot and other ~= member and rng:NextNumber() < Config.Bots.ThanksChance then
 			local delaySeconds = 0.4 + rng:NextNumber() * (Config.Rescue.ThanksWindow - 1)
 			task.delay(delaySeconds, function()
-				if current == round and round.item == item and not round.ended then
+				if current == round and round.lastItem == item and not round.ended then
 					item.thanksCount += 1
 					Net.event("ThanksFx"):FireAllClients({
 						fromSeat = other.seat,
@@ -668,7 +724,7 @@ local function useRescue(round: any, member: Member): boolean
 			end)
 		end
 	end
-	return true
+	return true, nil
 end
 
 -- ------------------------------------------------------------ 정산
@@ -676,17 +732,19 @@ local function runResults(round: any)
 	local sim = round.sim
 	local distance: number = sim.x
 
-	-- 아이템으로 늘린 거리 = 실제 거리 - 아이템을 안 썼을 때의 거리
-	local item = round.item
+	-- 부스터마다 늘린 거리 = 실제 거리 - 그 부스터 하나만 안 썼을 때의 거리
 	local itemKm = 0
-	local itemUserId: string? = nil
-	if item then
-		local shadow = round.shadow
+	local itemKms: { [string]: number } = {}
+	local humanThanks = 0
+	for _, item in ipairs(round.items) do
+		local shadow = item.shadow
 		if shadow then
 			FlightSim.runToEnd(shadow)
-			itemKm = math.max(0, distance - shadow.x)
+			item.km = math.max(0, distance - shadow.x)
 		end
-		itemUserId = item.member.id
+		itemKm += item.km
+		itemKms[item.member.id] = (itemKms[item.member.id] or 0) + item.km
+		humanThanks += item.humanThanks
 	end
 
 	local entries = {}
@@ -703,7 +761,7 @@ local function runResults(round: any)
 			})
 		end
 	end
-	local contributions = Scoring.contributions(distance, itemKm, itemUserId, entries)
+	local contributions = Scoring.contributionsFrom(distance, itemKms, entries)
 
 	-- 시상 3종 (사람만)
 	local heroId: string? = nil
@@ -711,9 +769,47 @@ local function runResults(round: any)
 		heroId = Scoring.hero(entries, contributions, pick)
 	end
 	local kingId = Scoring.missionKing(entries, pick)
-	local saviorId: string? = nil
-	if item and not item.member.isBot and not item.member.left then
-		saviorId = item.member.id
+
+	-- 구원자: 위기 구간에서 부스터를 쓴 사람 중 늘린 거리가 가장 큰 사람 (같으면 감사를 더 받은 사람, 그래도 같으면 먼저 쓴 사람).
+	-- 봇은 시상에서 빠지고, 봇이 위기에 쓴 부스터는 따로 알림
+	local saves: { [string]: any } = {}
+	local saveOrder: { any } = {}
+	local botSaveKm = 0
+	local botSaveNames: { string } = {}
+	for _, item in ipairs(round.items) do
+		local member: Member = item.member
+		if item.inCrisis then
+			if member.isBot then
+				botSaveKm += item.km
+				table.insert(botSaveNames, item.name)
+			elseif not member.left then
+				local save = saves[member.id]
+				if save == nil then
+					save = { id = member.id, km = 0, thanks = 0, names = {} }
+					saves[member.id] = save
+					table.insert(saveOrder, save)
+				end
+				save.km += item.km
+				save.thanks += item.thanksCount
+				table.insert(save.names, item.name)
+			end
+		end
+	end
+	local save: any = nil
+	for _, candidate in ipairs(saveOrder) do
+		if save == nil
+			or candidate.km > save.km + 1e-9
+			or (math.abs(candidate.km - save.km) <= 1e-9 and candidate.thanks > save.thanks)
+		then
+			save = candidate
+		end
+	end
+	local saviorId: string? = if save then save.id else nil
+	local function itemLabel(names: { string }): string
+		if #names == 1 then
+			return names[1]
+		end
+		return string.format("부스터 %d개", #names)
 	end
 	local awardTickets: { [string]: number } = {}
 	for _, id in ipairs({ heroId or "", kingId or "", saviorId or "" }) do
@@ -754,7 +850,9 @@ local function runResults(round: any)
 		itemKm = itemKm,
 		hero = awardInfo(heroId, if heroId then contributions[heroId] or 0 else 0, 0),
 		king = awardInfo(kingId, if kingId then memberById[kingId].bestStreak else 0, 0),
-		savior = awardInfo(saviorId, if item then item.thanksCount else 0, itemKm),
+		savior = awardInfo(saviorId, if save then save.thanks else 0, if save then save.km else 0),
+		saviorItem = if save then itemLabel(save.names) else "", -- 구원자가 위기에 쓴 부스터 이름
+		botSave = if #botSaveNames > 0 then { km = botSaveKm, item = itemLabel(botSaveNames) } else nil,
 	}
 
 	local humans = 0
@@ -767,11 +865,17 @@ local function runResults(round: any)
 		end
 	end
 
+	-- 황금 항로: 쓴 뒤로 난 거리의 코인이 배로 (탄 사람 모두)
+	local goldenKm = if round.goldenFromKm ~= nil then math.max(0, distance - round.goldenFromKm) else 0
+	local goldenInfo = Boosters.get("Golden")
+	local goldenMultiplier = if goldenInfo then goldenInfo.Value else 1
+
 	for _, player in ipairs(Players:GetPlayers()) do
 		local member: Member? = round.byPlayer[player]
 		local me: any = nil
 		if member and not member.left then
-			local coins = Scoring.coins(distance, member.afk)
+			local coins = Scoring.coins(distance, member.afk, goldenKm, goldenMultiplier)
+			local goldenCoins = coins - Scoring.coins(distance, member.afk)
 			local tickets = awardTickets[member.id] or 0
 			local newBest = distance > getNumber(player, "BestKm")
 			if newBest then
@@ -784,6 +888,7 @@ local function runResults(round: any)
 			local rank, people = Scoring.rank(member.id, contributions, entries)
 			me = {
 				coins = coins,
+				goldenCoins = goldenCoins, -- 코인 중 황금 항로로 더 받은 몫
 				tickets = tickets,
 				contributionKm = contributions[member.id] or 0,
 				rank = rank, -- 사람끼리의 순위 (영웅 시상과 같은 기준)
@@ -813,7 +918,7 @@ local function runResults(round: any)
 		humanAttempts = round.humanAttempts,
 		humanSuccesses = round.humanSuccesses,
 		ticketsUsed = round.ticketsUsed,
-		thanks = if item then item.humanThanks else 0,
+		thanks = humanThanks,
 		launch = round.launchQuality,
 	})
 
@@ -936,21 +1041,25 @@ local function connectRemotes()
 
 	Net.event("UseItem").OnServerEvent:Connect(function(player: Player, itemId: any)
 		local round = current
-		if round == nil or itemId ~= "RescueFuel" then
+		local info = Boosters.get(itemId)
+		if round == nil or info == nil then
 			return
 		end
 		local member = round.byPlayer[player]
 		if member and not member.left then
-			useRescue(round, member)
+			local ok, reason = useBooster(round, member, info.Id)
+			if not ok and reason then
+				Net.event("Announce"):FireClient(player, reason)
+			end
 		end
 	end)
 
 	Net.event("Thanks").OnServerEvent:Connect(function(player: Player)
 		local round = current
-		if round == nil or round.item == nil or round.ended then
+		if round == nil or round.lastItem == nil or round.ended then
 			return
 		end
-		local item = round.item
+		local item = round.lastItem
 		if now() > item.thanksUntil or item.member.player == player or item.thanks[player.UserId] then
 			return
 		end
@@ -1045,7 +1154,8 @@ function Round.botUseRescue(): boolean
 	if #bots == 0 then
 		return false
 	end
-	return useRescue(round, bots[pick(#bots)])
+	local ok = useBooster(round, bots[pick(#bots)], "RescueFuel")
+	return ok
 end
 
 -- 위기 구간 직전으로 건너뜀 (구원 연료·감사 버튼 시험용). 실제 건너뛰기는 비행 루프가 합니다.
