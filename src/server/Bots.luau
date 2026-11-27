@@ -1,4 +1,4 @@
--- 봇 승무원 (데모 전용): 빈 좌석을 채우는 회색 블록 인형.
+-- 봇 승무원 (데모 전용): 모자란 인원을 채우는 회색 블록 인형. 선실 바닥의 탑승 자리에 서서 가까운 외창을 바라봅니다.
 -- 봇은 기본 부품을 꽂고 미션을 정해진 확률로 성공합니다. 시상·지표에서는 빠집니다.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -47,28 +47,26 @@ function Bots.rate(skillId: string, chapter: number): number
 	return rates[math.clamp(chapter, 1, #rates)]
 end
 
--- 좌석에 앉은 블록 인형을 만듦
-function Bots.place(index: number, seatIndex: number)
+-- 탑승 자리에 선 블록 인형을 만듦. 속성 Seat = 탑승 자리 번호 (클로즈업·하트가 이 번호로 봇을 찾음)
+function Bots.place(index: number, spotIndex: number)
 	if not folder then
 		local created = Instance.new("Folder")
 		created.Name = "Bots"
 		created.Parent = World.rocket()
 		folder = created
 	end
-	local seat = World.seatCFrame(seatIndex)
+	local spot = World.spotCFrame(spotIndex) -- 발밑(선실 바닥)
 	local model = Instance.new("Model")
 	model.Name = "Bot" .. index
-	model:SetAttribute("Seat", seatIndex)
+	model:SetAttribute("Seat", spotIndex)
 
-	local torso = piece(model, "Torso", Vector3.new(2, 2, 1), seat * CFrame.new(0, 1.9, 0.2), BODY)
+	local torso = piece(model, "Torso", Vector3.new(2, 2, 1), spot * CFrame.new(0, 3, 0), BODY)
 	model.PrimaryPart = torso
-	local head = piece(model, "Head", Vector3.new(1.2, 1.2, 1.2), seat * CFrame.new(0, 3.5, 0.2), HEAD)
-	piece(model, "LeftArm", Vector3.new(0.8, 1.9, 0.8), seat * CFrame.new(-1.45, 1.85, 0.1), LIMB)
-	piece(model, "RightArm", Vector3.new(0.8, 1.9, 0.8), seat * CFrame.new(1.45, 1.85, 0.1), LIMB)
-	piece(model, "LeftThigh", Vector3.new(0.9, 0.9, 2), seat * CFrame.new(-0.5, 0.75, -0.9), LIMB)
-	piece(model, "RightThigh", Vector3.new(0.9, 0.9, 2), seat * CFrame.new(0.5, 0.75, -0.9), LIMB)
-	piece(model, "LeftShin", Vector3.new(0.9, 1.8, 0.9), seat * CFrame.new(-0.5, -0.4, -1.9), LIMB)
-	piece(model, "RightShin", Vector3.new(0.9, 1.8, 0.9), seat * CFrame.new(0.5, -0.4, -1.9), LIMB)
+	local head = piece(model, "Head", Vector3.new(1.2, 1.2, 1.2), spot * CFrame.new(0, 4.6, 0), HEAD)
+	piece(model, "LeftArm", Vector3.new(0.8, 1.9, 0.8), spot * CFrame.new(-1.45, 3, 0), LIMB)
+	piece(model, "RightArm", Vector3.new(0.8, 1.9, 0.8), spot * CFrame.new(1.45, 3, 0), LIMB)
+	piece(model, "LeftLeg", Vector3.new(0.9, 2, 0.9), spot * CFrame.new(-0.5, 1, 0), LIMB)
+	piece(model, "RightLeg", Vector3.new(0.9, 2, 0.9), spot * CFrame.new(0.5, 1, 0), LIMB)
 
 	local tag = Instance.new("BillboardGui")
 	tag.Name = "NameTag"
@@ -76,7 +74,7 @@ function Bots.place(index: number, seatIndex: number)
 	tag.Size = UDim2.fromScale(5, 1.5)
 	tag.StudsOffset = Vector3.new(0, 1.6, 0)
 	tag.MaxDistance = 90
-	tag.AlwaysOnTop = true -- 윗줄 좌석 받침대에 가려지지 않게 (바깥 시점에서는 MaxDistance 때문에 안 보임)
+	tag.AlwaysOnTop = true -- 다른 승무원 몸에 가려지지 않게 (바깥 시점에서는 MaxDistance 때문에 안 보임)
 	tag.Adornee = head
 	local label = Instance.new("TextLabel")
 	label.Size = UDim2.fromScale(1, 1)

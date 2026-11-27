@@ -98,7 +98,7 @@ function State.onMyChange(name: string, callback: () -> ()): RBXScriptConnection
 	return player:GetAttributeChangedSignal(name):Connect(callback)
 end
 
--- 로켓 안에 있는 동안(승무원·관전자)은 연출 카메라와 비행 화면을 씀
+-- 로켓 안에 있는 동안(승무원·관전자)은 선실 카메라와 비행 화면을 씀
 function State.aboard(): boolean
 	local role = State.role()
 	if role ~= "Crew" and role ~= "Ghost" then
@@ -106,6 +106,38 @@ function State.aboard(): boolean
 	end
 	local phase = State.phase()
 	return phase == "Build" or phase == "Countdown" or phase == "Flight" or phase == "Results"
+end
+
+-- 이번 판 승무원 번호(seat, 속성 Seat)로 그 승무원의 머리 파트를 찾음 (사람이면 캐릭터, 봇이면 블록 인형).
+-- 승무원은 선실 안을 걸어다니므로 클로즈업·하트는 이 파트의 지금 자리를 씁니다. 못 찾으면 nil.
+function State.memberPart(seat: number): BasePart?
+	if seat <= 0 then
+		return nil
+	end
+	for _, other in ipairs(Players:GetPlayers()) do
+		if other:GetAttribute("Role") == "Crew" and other:GetAttribute("Seat") == seat then
+			local character = other.Character
+			local head = character and (character:FindFirstChild("Head") or character:FindFirstChild("HumanoidRootPart"))
+			if head and head:IsA("BasePart") and character and character:IsDescendantOf(Workspace) then
+				return head
+			end
+			return nil
+		end
+	end
+	local rofly = Workspace:FindFirstChild("Rofly")
+	local rocket = rofly and rofly:FindFirstChild("Rocket")
+	local bots = rocket and rocket:FindFirstChild("Bots")
+	if bots then
+		for _, bot in ipairs(bots:GetChildren()) do
+			if bot:GetAttribute("Seat") == seat then
+				local head = bot:FindFirstChild("Head")
+				if head and head:IsA("BasePart") then
+					return head
+				end
+			end
+		end
+	end
+	return nil
 end
 
 -- ------------------------------------------------------------ 빌드 정보 (서버가 짧은 속성으로 보냄)
@@ -133,10 +165,14 @@ function State.typing(): boolean
 end
 
 -- ------------------------------------------------------------ 화면 배치 (서버 값이 아니라 클라이언트가 계산)
--- 선실 시점에서 전광판 아래 끝이 화면 높이의 어디에 오는지 (0 = 맨 위, 1 = 맨 아래).
--- CameraRig 가 계산해 넣고, Hud 가 한 줄 안내를 그 바로 아래에 두는 데 씁니다.
-State.BoardBottomDefault = 0.313 -- 승무원 10명(기본) 배치일 때의 값
+-- Hud 가 한 줄 안내·위기 경고·아이템 알림을 두는 높이의 기준 (0 = 맨 위, 1 = 맨 아래).
+-- 예전 고정 선실 카메라에서 전광판 아래 끝이 오던 자리입니다. 지금은 카메라가 내 캐릭터를 따라가서 늘 이 값입니다.
+State.BoardBottomDefault = 0.313
 State.boardBottom = State.BoardBottomDefault
+
+-- 내 미션 입력을 받는 중인지 (MissionUi 가 매 프레임 맞춤). 이 동안 CameraRig 가 걷기·점프를 잠가서
+-- 방향키·WASD·스페이스가 미션 입력으로만 쓰이고, 터치 기기는 이동 스틱 대신 미션 버튼을 보여 줍니다.
+State.missionInput = false
 
 -- ------------------------------------------------------------ 부드러운 비행 값
 -- 서버는 0.1초마다 값을 보내므로, 화면에는 그 사이를 이어서 보여 줍니다.
