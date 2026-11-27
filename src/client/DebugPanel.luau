@@ -69,12 +69,12 @@ function DebugPanel.init()
 	})
 	Ui.stroke(toggleButton, C.Purple, 2, 0)
 
-	local rows = 10
-	-- 줄 간격 34, 버튼 높이 30: 판의 아래 끝이 502 라서 비행 중 미션 점프 버튼(Key_Jump, 위 끝 510)을 덮지 않음.
+	local rows = 11
+	-- 줄 간격 30, 버튼 높이 27: 판의 아래 끝이 493 이라서 비행 중 미션 점프 버튼(Key_Jump, 위 끝 510)을 덮지 않음.
 	-- 발사장에서 보이는 엔진 기본 터치 점프 버튼은 화면 높이 500~720 픽셀인 태블릿에서 위쪽이 조금 가려질 수
 	-- 있음 (디버그 패널은 개발용이고 닫을 수 있어 그대로 둠)
-	local rowPitch = 34
-	local rowHeight = 30
+	local rowPitch = 30
+	local rowHeight = 27
 	panel = Ui.panel(root, "DebugPanel", {
 		AnchorPoint = Vector2.new(1, 0),
 		Position = UDim2.new(1, -16, 0, 150),
@@ -103,6 +103,9 @@ function DebugPanel.init()
 	end)
 	add("DebugCoins", string.format("코인 +%d", Config.Debug.CoinGrant), function()
 		send("Coins")
+	end)
+	add("DebugPartLevels", string.format("내 부품 레벨 +%d", Config.Progress.DebugLevels), function()
+		send("PartLevels")
 	end)
 	add("DebugCrisis", "위기 구간으로 건너뛰기", function()
 		send("Crisis")

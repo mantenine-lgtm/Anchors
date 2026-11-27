@@ -157,7 +157,7 @@ Config.Parts = {
 	},
 	RarityNames = { "일반", "희귀", "영웅", "전설" },
 	RarityPower = { 10, 100, 1000, 10000 },
-	LevelMultiplier = { 1.0, 1.3, 1.7, 2.2, 2.8, 3.6, 4.6, 6.0, 7.7, 10.0 },
+	-- 레벨 배율은 Parts.levelMultiplier (Config.Progress 아래 설명)
 	SlotBonus = 0.01, -- 꽂은 부품 1개당 그 종류 합계 +1%
 	RankExp = 1, -- 종류별 합계에서 센 순서 k번째 부품은 1 / k^RankExp 만 더함 (인원 효과를 완만하게)
 }
@@ -175,15 +175,34 @@ Config.Build = {
 	AnnounceRarity = 3, -- 사람이 이 레어도(3 = 영웅) 이상 부품을 처음 꽂으면 전원에게 알림 (기획서 '장착 연출')
 }
 
--- 장비 묶음 (데모 1은 전원 같은 장비. 디버그 패널에서 바꿈)
+-- 장비 묶음 (디버그 패널에서 바꿈). 기본 "각자 부품": 사람은 자기 부품 6개(레어도·레벨, PartProgress)를 꽂고 봇은 일반 Lv1.
+-- 나머지 묶음은 시험용으로 사람·봇 모두 같은 장비. 옛 Lv k(1~10 표)는 Lv 1+1111(k−1) 과 파워가 거의 같음 (Lv5 → 4,445)
 Config.Gear = {
-	Default = "common1",
+	Default = "own",
 	Presets = {
+		{ Id = "own", Name = "각자 부품", Rarity = 1, Level = 1, Own = true }, -- Rarity·Level 은 봇 장비
 		{ Id = "common1", Name = "일반 Lv1", Rarity = 1, Level = 1 },
-		{ Id = "rare5", Name = "희귀 Lv5", Rarity = 2, Level = 5 },
-		{ Id = "epic5", Name = "영웅 Lv5", Rarity = 3, Level = 5 },
-		{ Id = "legend10", Name = "전설 Lv10", Rarity = 4, Level = 10 },
+		{ Id = "rare5", Name = "희귀 Lv4,445", Rarity = 2, Level = 4445 },
+		{ Id = "epic5", Name = "영웅 Lv4,445", Rarity = 3, Level = 4445 },
+		{ Id = "legend10", Name = "전설 Lv10,000", Rarity = 4, Level = 10000 },
 	},
+}
+
+-- 부품 레벨·경험치 (Nick 11-27: 만렙 약 10000, 비행 중 경험치 바가 쭉쭉 차고 레벨업마다 폭죽. 만렙까지 약 2000판, 초반엔 잘
+-- 오르다가 갈수록 힘들게). 수치는 밸런스 스레드(11-27). 사람마다 부품 6종(종류별 1개)이 각자 레어도·레벨·경험치를 가짐.
+-- 시작은 6종 모두 일반 Lv1, 서버가 켜져 있는 동안만 기억.
+-- 다음 레벨까지 경험치 = 내림(ExpRarityFactor[레어도] × (지금 레벨 + ExpLevelOffset)² / ExpDivisor).
+-- 새 일반 부품은 첫 판에 Lv700 안팎, 만렙까지 일반 약 500판·전설 약 2,000판.
+-- 파워 = 레어도 기본값 × 레벨 배율 10^((레벨−1)/(만렙−1)): Lv1 ×1, Lv1,000 ×1.26, Lv5,000 ×3.16, Lv10,000 ×10 (Parts.power).
+-- 비행 중 오른 레벨은 다음 판 조립부터 파워에 들어감 (판 도중에는 그대로).
+Config.Progress = {
+	MaxLevel = 10000,
+	ExpRarityFactor = { 1, 2, 3, 4 }, -- 일반·희귀·영웅·전설
+	ExpLevelOffset = 500,
+	ExpDivisor = 500,
+	ExpPerSecond = 10000, -- 발사부터 비행이 끝날 때까지 1초마다 탄 사람(봇·관전자 제외)의 부품 하나가 얻는 경험치. 데모 2는 2배
+	SendInterval = 0.25, -- 비행 중 경험치를 주고 그 사람 화면에 알리는 간격(초). 레벨업 폭죽도 이 간격으로 묶어서 터짐
+	DebugLevels = 1000, -- 디버그 패널의 "내 부품 레벨 +" 버튼 한 번에 오르는 레벨 (열 번이면 만렙, 폭죽도 터짐)
 }
 
 -- 보상 (임시)

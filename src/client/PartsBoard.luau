@@ -1,5 +1,6 @@
 -- 선실 부품 장착판: -X 벽의 큰 화면. 이번 판 부품 그리드 6개(종류마다 하나)에 누가 어디에 꽂았는지 보여 줍니다.
--- 조립 중에는 꽂히는 대로 바로 채워지고, 비행·정산 동안에는 장착한 그대로 남습니다. 내 부품 칸은 흰 테두리와 '나'.
+-- 조립 중에는 꽂히는 대로 바로 채워지고, 비행·정산 동안에는 장착한 그대로 남습니다.
+-- 내 부품 칸은 분홍(BuildUi.MineColor) 굵은 테두리와 분홍 '나' 딱지, 남의 칸은 조금 흐리게 (Nick 11-27: 내 부품은 구별되게).
 -- 그리드는 조립 화면(BuildUi)과 같은 서버 자료(RoundState.Grid 폴더의 속성, 서버 Assembly.luau)를 읽어 그립니다.
 -- 화면은 클라이언트가 만들어 서버의 PartsBoard 파트 앞면에 붙입니다.
 
@@ -30,7 +31,8 @@ local CELL_GAP = 4
 local REFRESH = 0.15 -- 칸을 다시 읽는 간격(초)
 local CELL_CLOSED = Color3.fromRGB(16, 19, 30)
 local CELL_OPEN = Color3.fromRGB(30, 36, 54)
-local INK = Color3.fromRGB(18, 22, 32)
+local MINE = BuildUi.MineColor or Color3.fromRGB(255, 72, 196)
+local TAKEN_FADE = BuildUi.TakenFade or 0.4
 
 local stateFolder: Instance = ReplicatedStorage:WaitForChild(Net.StateName)
 
@@ -102,15 +104,21 @@ local function makeCards(size: number)
 				BackgroundTransparency = 0,
 			})
 			Ui.corner(cellFrame, if size <= 6 then 6 else 3)
-			local stroke = Ui.stroke(cellFrame, C.White, 3, 0)
+			local stroke = Ui.stroke(cellFrame, MINE, if size <= 6 then 6 else 4, 0)
 			stroke.Enabled = false
 			local mark: TextLabel? = nil
 			if marks then
+				-- 내 칸 가운데의 분홍 '나' 딱지 (남의 칸에서는 숨김)
 				mark = Ui.label(cellFrame, "Mark", "", if size <= 4 then 34 else 24, {
-					Size = UDim2.fromScale(1, 1),
-					TextColor3 = INK,
+					AnchorPoint = Vector2.new(0.5, 0.5),
+					Position = UDim2.fromScale(0.5, 0.5),
+					Size = UDim2.fromScale(0.7, 0.55),
+					BackgroundColor3 = MINE,
+					BackgroundTransparency = 1,
+					TextColor3 = C.White,
 					TextStrokeTransparency = 1,
 				})
+				Ui.corner(mark :: TextLabel, 6)
 			end
 			card.cells[cellIndex] = { frame = cellFrame, stroke = stroke, mark = mark, look = "" }
 		end
@@ -134,7 +142,7 @@ local function paint(cell: Cell, look: string, color: Color3)
 		frame.BackgroundTransparency = 0
 	else
 		frame.BackgroundColor3 = color
-		frame.BackgroundTransparency = if look == "mine" then 0 else 0.15
+		frame.BackgroundTransparency = if look == "mine" then 0 else TAKEN_FADE
 		if before == "open" then
 			-- 꽂히는 순간 잠깐 밝게
 			frame.BackgroundColor3 = C.White
@@ -143,6 +151,7 @@ local function paint(cell: Cell, look: string, color: Color3)
 	end
 	if cell.mark then
 		cell.mark.Text = if look == "mine" then "나" else ""
+		cell.mark.BackgroundTransparency = if look == "mine" then 0 else 1
 	end
 end
 

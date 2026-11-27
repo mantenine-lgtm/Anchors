@@ -9,6 +9,7 @@ local Config = require(Shared:WaitForChild("Config"))
 local Net = require(Shared:WaitForChild("Net"))
 
 local Metrics = require(script.Parent.Metrics)
+local PartProgress = require(script.Parent.PartProgress)
 local Round = require(script.Parent.Round)
 
 local DebugCommands = {}
@@ -42,6 +43,10 @@ local function handle(player: Player, command: any, value: any)
 		local coins = player:GetAttribute("Coins")
 		player:SetAttribute("Coins", (if typeof(coins) == "number" then coins else 0) + Config.Debug.CoinGrant)
 		reply(player, string.format("코인 +%d", Config.Debug.CoinGrant))
+	elseif command == "PartLevels" then
+		local ups = PartProgress.grantLevels(player.UserId, Config.Progress.DebugLevels)
+		PartProgress.send(player, ups)
+		reply(player, string.format("내 부품 6개 레벨 +%d", Config.Progress.DebugLevels))
 	elseif command == "BotFill" and typeof(value) == "number" and value == value then
 		Round.setBotFill(value)
 		reply(player, string.format("다음 판부터 승무원을 %d명까지 봇으로 채웁니다", math.clamp(math.floor(value), 1, 50)))
