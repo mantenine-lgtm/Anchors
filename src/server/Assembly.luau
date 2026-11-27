@@ -7,11 +7,13 @@
 --   Grid           Round, Size(한 변 칸 수), Rarity·Level(이번 판 장비), Name<좌석>·Bot<좌석>(승무원)
 --   Grid/<종류 Id>  C<칸 번호> = 꽂은 승무원의 좌석 번호 (0 = 열린 빈 칸). 속성이 없는 칸은 닫힌 칸.
 --                  Ra<좌석>·Lv<좌석> = 그 승무원의 이 종류 부품 레어도·레벨 ('각자 부품'일 때 사람만. 없으면 Grid 의 Rarity·Level)
+--                  F<좌석> = true 면 그 승무원의 이 종류 부품이 피버 중 (비행 중 미션 판정마다 Round 가 정함, 없으면 피버 아님)
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared:WaitForChild("Config"))
+local Fever = require(Shared:WaitForChild("Fever"))
 local Grid = require(Shared:WaitForChild("Grid"))
 local Net = require(Shared:WaitForChild("Net"))
 
@@ -305,6 +307,33 @@ function Assembly.finish(session: Session): { [Member]: number }
 	end
 	session.finished = true
 	return filled
+end
+
+-- 그 승무원이 그 종류 부품을 로켓에 꽂았는지 (판 도중에 나간 사람이 꽂아 둔 부품도 로켓에 남음)
+function Assembly.hasPart(session: Session, member: Member, typeId: string): boolean
+	local mine = session.placed[member]
+	return mine ~= nil and mine[typeId] ~= nil
+end
+
+-- 부품 피버 표시: 그 승무원의 그 종류 부품이 피버 중인지 Grid/<종류>의 F<좌석> 속성에 씀 (바뀔 때만. 꺼지면 속성을 지움)
+function Assembly.setFever(session: Session, member: Member, typeId: string, on: boolean)
+	local folder = session.typeFolders[typeId]
+	if folder == nil then
+		return
+	end
+	local name = Fever.attribute(member.seat)
+	if (folder:GetAttribute(name) == true) ~= on then
+		folder:SetAttribute(name, if on then true else nil)
+	end
+end
+
+-- 피버 표시를 모두 끔
+function Assembly.clearFever(session: Session)
+	for _, member in ipairs(session.crew) do
+		for _, info in ipairs(Config.Parts.Types) do
+			Assembly.setFever(session, member, info.Id, false)
+		end
+	end
 end
 
 -- 꽂힌 부품만 담은 승무원별 부품 (종류별 합계 계산용). 판 도중에 나간 사람이 꽂아 둔 부품도 로켓에 남습니다.

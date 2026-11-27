@@ -16,6 +16,7 @@ local Net = require(Shared:WaitForChild("Net"))
 local Route = require(Shared:WaitForChild("Route"))
 
 local BoosterMenu = require(script.Parent:WaitForChild("BoosterMenu"))
+local FeverFx = require(script.Parent:WaitForChild("FeverFx"))
 local State = require(script.Parent:WaitForChild("State"))
 local Ui = require(script.Parent:WaitForChild("Ui"))
 
@@ -42,6 +43,8 @@ local joinButton: TextButton
 -- 비행
 local leftPanel: Frame
 local speedLabel: TextLabel
+local speedTitle: TextLabel? = nil -- '속도' 제목. 부품 피버 중에는 '속도 · 피버 +N%' (금색)
+local speedFever = -1 -- 제목에 마지막으로 쓴 피버 보너스 (%)
 local fuelName: TextLabel
 local fuelFill: Frame
 local comboLabel: TextLabel
@@ -238,6 +241,7 @@ local function buildFlightPanels()
 		Visible = false,
 	})
 	speedLabel = statLine(leftPanel, "Speed", 8, "속도")
+	speedTitle = leftPanel:FindFirstChild("SpeedTitle") :: TextLabel?
 	fuelName = Ui.label(leftPanel, "FuelName", "", 16, {
 		Position = UDim2.fromOffset(14, 66),
 		Size = UDim2.new(1, -28, 0, 20),
@@ -777,6 +781,13 @@ end
 local function updateFlight()
 	local f = State.flight
 	speedLabel.Text = Fmt.speed(f.speed)
+	local feverPercent = math.floor(State.number("FeverBonus") * 100 + 0.5)
+	local title = speedTitle
+	if title and feverPercent ~= speedFever then
+		speedFever = feverPercent
+		title.Text = if feverPercent > 0 then string.format("속도 · 피버 +%d%%", feverPercent) else "속도"
+		title.TextColor3 = if feverPercent > 0 then FeverFx.Gold else C.Dim
+	end
 
 	local t = f.t
 	local hot, fuel, sail = State.number("HotTime"), State.number("FuelTime"), State.number("SailTime")

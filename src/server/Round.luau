@@ -9,6 +9,7 @@ local Workspace = game:GetService("Workspace")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Boosters = require(Shared:WaitForChild("Boosters"))
 local Config = require(Shared:WaitForChild("Config"))
+local Fever = require(Shared:WaitForChild("Fever"))
 local FlightSim = require(Shared:WaitForChild("FlightSim"))
 local Missions = require(Shared:WaitForChild("Missions"))
 local Net = require(Shared:WaitForChild("Net"))
@@ -51,6 +52,7 @@ type Member = {
 
 local rng = Random.new()
 local planetRng = Random.new() -- 행성 고르기 전용 (판 진행에 쓰는 rng 의 순서를 바꾸지 않게)
+local feverRng = Random.new() -- 부품 피버 뽑기 전용 (같은 까닭)
 local state: Folder
 local current: any = nil -- 진행 중인 판 (없으면 nil)
 local roundNumber = 0
@@ -65,6 +67,7 @@ local options = {
 	botFillTo = Config.Bots.FillTo,
 	botSkill = Config.Bots.Skill,
 	gear = Config.Gear.Default,
+	fever = Fever.mode(Config.Fever.Default), -- 부품 피버 시험 방식 (보통 / 전부 피버 / 끄기)
 }
 
 local function now(): number
@@ -180,12 +183,16 @@ local function resetFlightState()
 	end
 	state:SetAttribute("GoldenFromKm", -1) -- 황금 항로를 쓴 지점 (안 썼으면 -1)
 	state:SetAttribute("Escaped", false)
+	state:SetAttribute("FeverCount", 0) -- 지금 피버 중인 부품 수 (로켓 전체)
+	state:SetAttribute("FeverParts", 0) -- 피버를 뽑은 부품 수 (로켓에 꽂힌 부품 전체)
+	state:SetAttribute("FeverBonus", 0) -- 부품 피버로 빨라진 비율 (0.13 = 속도 +13%)
 end
 
 local function showOptions()
 	state:SetAttribute("OptBotFill", options.botFillTo)
 	state:SetAttribute("OptBotSkill", options.botSkill)
 	state:SetAttribute("OptGear", options.gear)
+	state:SetAttribute("OptFever", options.fever)
 end
 
 -- 조립 화면에 쓸 값: 부품 종류별 합계와 이번 판 장비 이름.
@@ -319,7 +326,8 @@ local function refreshAssembly(round: any, force: boolean)
 	round.lastRecalc = now()
 	local totals = Parts.totals(Assembly.loadouts(session))
 	round.totals = totals
-	round.expectedKm = FlightSim.predict(totals, 0, Config.Rewards.ExpectedRate)
+	local rate = Config.Rewards.ExpectedRate
+	round.expectedKm = FlightSim.predict(totals, 0, rate, Fever.expected(rate, options.fever))
 	state:SetAttribute("ExpectedKm", round.expectedKm)
 	showBuild(totals :: any, round.gearName)
 end
@@ -608,12 +616,65 @@ local function resolveMission(round: any, mission: any): number
 	return rate
 end
 
--- 결과는 팀 전체 수치만 알리고, 각자에게는 자기 결과만 따로 보냄
-local function broadcastMissionResult(round: any, mission: any, rate: number)
+-- 부품 피버 속도 배율을 로켓과 부스터 그림자 비행(그 부스터 하나만 안 쓴 비행)에 똑같이 넣고 화면에 알림.
+-- 그림자도 같은 피버를 받아야 부스터로 늘린 거리에 피버 몫이 섞이지 않음
+local function applyFever(round: any, multiplier: number, count: number, placed: number)
+	FlightSim.setFever(round.sim, multiplier)
+	for _, item in ipairs(round.items) do
+		local shadow = item.shadow
+		if shadow then
+			FlightSim.setFever(shadow, multiplier)
+		end
+	end
+	state:SetAttribute("FeverParts", placed)
+	state:SetAttribute("FeverCount", count)
+	state:SetAttribute("FeverBonus", multiplier - 1)
+end
+
+-- 부품 피버 (Config.Fever, Fever.luau): 미션 판정 직후 로켓에 꽂힌 부품 하나하나가 따로 피버를 뽑음.
+-- 부품 주인이 이번 미션에 성공했으면 SuccessChance, 아니면 FailChance. 다음 미션 판정까지 이어지고 그때 다시 뽑음.
+-- 승무원마다 자기 부품 중 피버에 들어간 수를 돌려줌 (미션 결과에 '내 부품 피버 N개')
+local function rollFever(round: any): { [Member]: number }
+	local session = round.assembly
+	local mine: { [Member]: number } = {}
+	local fevered, placed = 0, 0
+	for _, member: Member in ipairs(round.crew) do
+		local chance = Fever.chance(member.lastResult == "success", options.fever)
+		local count = 0
+		for _, info in ipairs(Config.Parts.Types) do
+			if Assembly.hasPart(session, member, info.Id) then
+				placed += 1
+				local on = feverRng:NextNumber() < chance
+				Assembly.setFever(session, member, info.Id, on)
+				if on then
+					count += 1
+				end
+			end
+		end
+		fevered += count
+		mine[member] = count
+	end
+	applyFever(round, Fever.multiplier(fevered, placed), fevered, placed)
+	return mine
+end
+
+-- 피버 표시를 모두 끔 (비행이 끝날 때). 끝난 비행의 속도 배율과 부스터 그림자는 그대로 둠 (정산 때 그림자를 끝까지 이어 감)
+local function hideFever(round: any)
+	Assembly.clearFever(round.assembly)
+	state:SetAttribute("FeverCount", 0)
+	state:SetAttribute("FeverParts", 0)
+	state:SetAttribute("FeverBonus", 0)
+end
+
+-- 결과는 팀 전체 수치만 알리고, 각자에게는 자기 결과만 따로 보냄 (부품 피버는 로켓 전체 수와 내 부품 수)
+local function broadcastMissionResult(round: any, mission: any, rate: number, feverMine: { [Member]: number })
 	local sim = round.sim
 	state:SetAttribute("Combo", sim.combo)
 	state:SetAttribute("LastRate", rate)
 	state:SetAttribute("MissionCount", round.missionCount)
+	local feverCount = getNumber(state, "FeverCount")
+	local feverParts = getNumber(state, "FeverParts")
+	local feverBonus = getNumber(state, "FeverBonus")
 	for _, player in ipairs(Players:GetPlayers()) do
 		local member = round.byPlayer[player]
 		Net.event("MissionResult"):FireClient(player, {
@@ -622,6 +683,10 @@ local function broadcastMissionResult(round: any, mission: any, rate: number)
 			combo = sim.combo,
 			perfect = rate >= 1 - 1e-9,
 			own = if member then member.lastResult else "none",
+			fever = feverCount,
+			feverParts = feverParts,
+			feverBonus = feverBonus,
+			feverMine = if member then feverMine[member] or 0 else 0,
 		})
 	end
 end
@@ -681,9 +746,11 @@ local function runFlight(round: any)
 	while not sim.ended do
 		accumulator = math.min(accumulator + RunService.Heartbeat:Wait(), 0.25)
 		if round.fastForward then
-			-- 디버그: 위기 구간 직전까지 빨리 감기. 그 사이 미션은 예상 성공률로 자동 처리합니다.
+			-- 디버그: 위기 구간 직전까지 빨리 감기. 그 사이 미션은 예상 성공률로 자동 처리합니다 (부품 피버는 끔).
 			round.fastForward = false
 			round.mission = nil
+			hideFever(round)
+			applyFever(round, 1, 0, 0)
 			local steps = 0
 			while not sim.ended and steps < 12000 do
 				if steps % 5 == 0
@@ -721,9 +788,11 @@ local function runFlight(round: any)
 			end
 			local rate: number? = nil
 			local resolved: any = nil
+			local feverMine: { [Member]: number }? = nil
 			if sim.t >= resolveAt and round.mission ~= nil then
 				resolved = round.mission
 				rate = resolveMission(round, resolved)
+				feverMine = rollFever(round) -- 이 칸의 이동부터 새 피버 배율
 				round.mission = nil
 				missionIndex += 1
 				resolveAt = Missions.resolveTime(missionIndex)
@@ -731,7 +800,7 @@ local function runFlight(round: any)
 			FlightSim.step(sim, rate)
 			stepShadows(round, rate)
 			if resolved ~= nil and rate ~= nil then
-				broadcastMissionResult(round, resolved, rate)
+				broadcastMissionResult(round, resolved, rate, feverMine or {})
 			end
 		end
 		if sim.t - lastEtaCheck >= Config.Crisis.CheckInterval then
@@ -752,6 +821,7 @@ local function runFlight(round: any)
 	round.mission = nil
 	syncFlight(round)
 	awardPartExp(round, true)
+	hideFever(round)
 	state:SetAttribute("Crisis", false)
 	state:SetAttribute("Escaped", sim.escaped)
 	Net.event("FlightEnd"):FireAllClients({
@@ -1338,6 +1408,12 @@ end
 
 function Round.setGear(id: string)
 	options.gear = Parts.preset(id).Id
+	showOptions()
+end
+
+-- 부품 피버 시험 방식 (보통 / 전부 피버 / 끄기). 다음 미션 판정부터
+function Round.setFever(id: string)
+	options.fever = Fever.mode(id)
 	showOptions()
 end
 
