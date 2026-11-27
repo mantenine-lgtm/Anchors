@@ -1,11 +1,13 @@
--- 비행 중 코인 연출: 화면 위쪽 거리 오른쪽에 '이번 비행 코인' 칸을 두고, 코인이 날아 들어올 때마다 숫자를 올립니다.
+-- 보유 코인 칸과 비행 중 코인 연출: 화면 오른쪽 위 티켓 칸 옆에 '보유 코인' 칸을 늘 두고, 비행 중에는 번 코인이
+-- 날아 들어올 때마다 보유 코인 숫자를 올립니다. 칸 위쪽 작은 글자는 이번 비행으로 번 코인 ('이번 비행 +N').
 -- - 거리 코인: 거리만큼 쌓이는 코인은 거리 숫자에서 작게 튀어나와 칸으로 폴짝 들어갑니다 (짧게 모아 0.3초마다).
 -- - 부스터 코인: 부스터로 더 번 코인(서버가 알려 주는 '그 부스터 하나만 안 쓴 비행'과의 거리 차이, 황금 항로는 늘어난 코인)은
 --   부스터 색으로 잠깐 모았다가 화면 가운데에서 한꺼번에 터져 나와 칸으로 빨려 들어가고, 칸 아래에 '+N 터보 엔진'처럼 뜹니다.
 -- - 한 번에 들어오는 코인이 많을수록 코인 수·크기·퍼지는 폭·글자·고리·반짝임·소리가 커지고, 적으면 작게 들어옵니다.
 --   크기는 이번 판 예상 코인(조립 때 예상 거리 × CoinsPerKm)에 대한 비율이라 장비가 좋아져도 같은 비율이면 같은 느낌입니다.
--- - 숫자는 정산과 같은 계산(Scoring.liveCoins, 자리 비움이면 절반)이라 비행이 끝나면 정산 화면의 '코인 +N'과 같아집니다.
--- 수치는 Config.CoinFx. 승무원에게만 보입니다 (관전자는 코인을 받지 않음).
+-- - 숫자는 정산과 같은 계산(Scoring.liveCoins, 자리 비움이면 절반)이라 비행이 끝나면 '이번 비행 +N'은 정산 화면의
+--   '코인 +N'과, 보유 코인은 서버의 보유 코인과 같아집니다 (정산 코인을 두 번 세지 않음).
+-- 수치는 Config.CoinFx. 칸은 모두에게 보이고, 날아오는 코인은 탄 사람에게만 (관전자는 코인을 받지 않음).
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -29,9 +31,10 @@ local FX = Config.CoinFx
 local player = Players.LocalPlayer
 local rng = Random.new()
 
--- 칸 배치 (기준 화면 1280x720 단위). 위쪽 가운데 거리 글자(가운데에서 좌우 100 안쪽) 오른쪽, 오른쪽 위 지갑(오른쪽 끝에서 266) 왼쪽.
--- 거리 글자와 같은 줄이고, 아래 끝(48)이 그 밑의 스테이지 안내 글자(54쯤부터)에 닿지 않습니다.
-CoinFx.Left = 132 -- 화면 가운데에서 칸 왼쪽 끝까지
+-- 칸 배치 (기준 화면 1280x720 단위, 화면 폭은 1280 이상). 오른쪽 위 티켓 칸(오른쪽 끝에서 146) 왼쪽에 붙여 두어
+-- 위쪽 가운데 제목(거리·'행성 붕괴까지 0:30'·'로켓 조립 중' 등, 가운데에서 좌우 170 안쪽)과 떨어지고,
+-- 아래 끝(48)이 그 밑의 안내 글자(52쯤부터)에 닿지 않습니다.
+CoinFx.Right = 176 -- 화면 오른쪽 끝에서 칸 오른쪽 끝까지 (커져도 티켓 칸과 10 띄움)
 CoinFx.Top = 8
 CoinFx.Width = 220
 CoinFx.Height = 40
@@ -42,7 +45,7 @@ local TEXT_WIDTH = CoinFx.Width - TEXT_X - 8
 local NUMBER_SIZE = 24
 local NUMBER_MIN = 14
 local CAPTION_SIZE = 11
-local MAX_PULSE = 0.18 -- 코인이 들어올 때 칸이 커지는 최대 비율 (커져도 지갑에 닿지 않게)
+local MAX_PULSE = 0.18 -- 코인이 들어올 때 칸이 커지는 최대 비율 (커져도 티켓 칸에 닿지 않게)
 local POPUP_SECONDS = 1.4
 
 local GOLD = Color3.fromRGB(255, 196, 46)
@@ -101,6 +104,7 @@ local counter: Frame
 local counterScale: UIScale
 local counterStroke: UIStroke
 local numberLabel: TextLabel
+local flightLabel: TextLabel -- '이번 비행 +N'
 local layer: Frame -- 칸 위의 효과 (root 안)
 local flyLayer: Frame -- 날아가는 코인 (flyRoot 안)
 local gleamFrame: Frame
@@ -117,7 +121,6 @@ local fittedLength = -1
 
 -- 이번 비행의 코인 셈 (모두 자리 비움 반영 전 값)
 local counting = false -- 승무원으로 비행 중이라 코인을 세는 중
-local shown = false -- 칸을 보여 주는 중 (비행 ~ 정산)
 local earned = 0 -- 지금까지 번 코인 (정산과 같은 계산. 화면 거리가 잠깐 뒤로 당겨져도 줄지 않게 가장 큰 값)
 local claimed = 0 -- 칸으로 날려 보낸 코인 (날아가는 중 + 닿은 것)
 local claimedBy: { [string]: number } = {} -- 그중 부스터마다의 몫
@@ -128,13 +131,39 @@ local lastDistance = 0
 local official: number? = nil -- 정산에서 받은 코인 (자리 비움 반영 후)
 local lastPhase = ""
 
--- 부스터 코인을 나눠 줄 순서: 황금 항로가 먼저 (정산의 '황금 항로 +N'과 끝까지 같게. 다른 부스터끼리 거리를
--- 겹쳐 세면 마지막에 모자랄 수 있음)
+-- 보유 코인 (칸의 큰 숫자). 서버는 정산 때 한꺼번에 보유 코인을 늘리므로, 비행 중에는 화면에서 따로 셈
+local inFlight = false -- 탄 사람: 비행 시작 ~ 정산 코인이 다 날아와 닿을 때까지 '비행 전 보유 코인 + 닿은 코인'을 보임
+local walletBase = 0 -- 비행을 시작할 때의 보유 코인 + 비행 중에 따로 받은 코인 (감사·디버그)
+local flightOver = false -- 비행 끝 신호를 받음: 이 뒤로 늘어나는 보유 코인은 정산 몫이라 더하지 않음 (날아와 닿으며 오름)
+local lastWallet = 0
+local walletAfter: number? = nil -- 정산 뒤 보유 코인 (서버가 정산 신호에 같이 보냄)
+local lastValue = -1 -- 지난 프레임에 칸에 적은 보유 코인
+local arrivedNow = false -- 이번 프레임에 코인이 칸에 닿았는지
+
+-- 부스터 코인을 나눠 줄 순서: 황금 항로가 먼저 (정산의 '황금 항로 +N'과 끝까지 같게), 다른 부스터는 나중에 쓴 것부터.
+-- 부스터끼리 겹쳐 세는 거리(터보 중에 쓴 웜홀은 터보 덕에 더 멀리 감: 두 부스터 몫에 다 들어감)는 먼저 쓴 부스터가
+-- 그 뒤에 받아서, 방금 쓴 부스터의 코인이 한 무더기로 다 나옴
 local ORDER: { string } = { "Golden" }
 for _, info in ipairs(Boosters.List) do
 	if info.Id ~= "Golden" then
 		table.insert(ORDER, info.Id)
 	end
+end
+local order: { string } = table.clone(ORDER) -- 이번 비행에서 나눠 줄 차례
+local usedAt: { [string]: number } = {} -- 부스터를 쓴 것을 본 차례
+local usedCount = 0
+
+local function sortOrder()
+	table.sort(order, function(a: string, b: string): boolean
+		if a == "Golden" or b == "Golden" then
+			return a == "Golden" and b ~= "Golden"
+		end
+		local x, y = usedAt[a] or 0, usedAt[b] or 0
+		if x ~= y then
+			return x > y
+		end
+		return a < b
+	end)
 end
 
 -- ------------------------------------------------------------ 계산
@@ -148,6 +177,14 @@ local function shownCoins(): number
 		return official
 	end
 	return math.floor(landed * afkFactor())
+end
+
+-- 칸에 적는 보유 코인
+local function walletCoins(): number
+	if inFlight then
+		return walletBase + shownCoins()
+	end
+	return State.myNumber("Coins")
 end
 
 -- 이번 판 예상 코인: 효과 크기의 기준
@@ -251,7 +288,7 @@ end
 
 -- 칸의 코인 그림 가운데 (코인이 날아가는 곳)
 local function target(refW: number): (number, number)
-	return refW * 0.5 + CoinFx.Left + ICON_X + ICON / 2, CoinFx.Top + CoinFx.Height / 2
+	return refW - CoinFx.Right - CoinFx.Width + ICON_X + ICON / 2, CoinFx.Top + CoinFx.Height / 2
 end
 
 -- ------------------------------------------------------------ 소리
@@ -297,7 +334,7 @@ local function popup(burst: Burst)
 		end
 	end
 	local refW = refSize()
-	local x = refW * 0.5 + CoinFx.Left + CoinFx.Width
+	local x = refW - CoinFx.Right
 	local y = CoinFx.Top + CoinFx.Height + 4 + below
 	local label = Ui.label(layer, "CoinPopup", text, size, {
 		AnchorPoint = Vector2.new(1, 0),
@@ -416,10 +453,10 @@ local function launch(id: string?, amount: number)
 			midX = fromX + (rng:NextNumber() - 0.3) * 30
 			midY = 14 + rng:NextNumber() * 8
 		end
-		-- 칸으로 갈 때 옆으로 휘는 정도
+		-- 칸으로 갈 때 옆으로 휘는 정도 (거리 코인은 화면 위쪽 줄을 따라 옆으로 가므로 조금만: 화면 밖으로 안 나가게)
 		local dx, dy = tx - midX, ty - midY
 		local length = math.max(math.sqrt(dx * dx + dy * dy), 1)
-		local bend = (rng:NextNumber() - 0.5) * 0.5 * length
+		local bend = (rng:NextNumber() - 0.5) * (if id ~= nil then 0.5 else 0.2) * length
 		local glowColor: Color3? = if id ~= nil then color else nil
 		local holder, coin = makeCoin(flyLayer, "Coin", size, glowColor, 0.75 - 0.2 * power)
 		holder.Position = UDim2.fromOffset(fromX, fromY)
@@ -457,6 +494,7 @@ end
 local function arrive(sprite: Sprite)
 	local burst = sprite.burst
 	landed += sprite.value
+	arrivedNow = true
 	burst.left -= 1
 	pulse = math.max(pulse, 0.04 + (MAX_PULSE - 0.04) * burst.power)
 	glow = math.max(glow, burst.power)
@@ -495,8 +533,12 @@ local function resetCount()
 	landed = 0
 	table.clear(claimedBy)
 	table.clear(gatherFrom)
+	table.clear(usedAt)
+	usedCount = 0
+	sortOrder()
 	lastDistance = 0
 	official = nil
+	walletAfter = nil
 	counter:SetAttribute("Official", -1)
 	counter:SetAttribute("Mismatch", 0)
 	for _, id in ipairs(ORDER) do
@@ -528,14 +570,21 @@ local function collect(flush: boolean)
 		shares.Golden = math.max(shares.Golden - 1, 0)
 	end
 	local clock = os.clock()
+	for _, info in ipairs(Boosters.List) do
+		if usedAt[info.Id] == nil and State.flag(Boosters.usedAttribute(info.Id)) then
+			usedCount += 1
+			usedAt[info.Id] = usedCount
+			sortOrder()
+		end
+	end
 	local othersClaimed = 0 -- 황금 항로가 아닌 부스터로 날린 코인
 	for id, amount in pairs(claimedBy) do
 		if id ~= "Golden" then
 			othersClaimed += amount
 		end
 	end
-	local othersPending = 0 -- 그 부스터들이 모으는 중인 코인
-	for _, id in ipairs(ORDER) do
+	local othersPending = 0 -- 그 부스터들이 모으는 중인 코인 (이 줄에서는 지금 부스터보다 나중에 쓴 것들의 몫)
+	for _, id in ipairs(order) do
 		local due = (shares[id] or 0) - (claimedBy[id] or 0)
 		if due >= 1 then
 			local started = gatherFrom[id]
@@ -546,7 +595,7 @@ local function collect(flush: boolean)
 			if flush or clock - started >= FX.BoostGather then
 				local room = earned - claimed
 				if id ~= "Golden" then
-					room = math.min(room, plain - distanceClaimed - othersClaimed)
+					room = math.min(room, plain - distanceClaimed - othersClaimed - othersPending)
 				end
 				local give = math.min(math.floor(due), room)
 				if give >= 1 then
@@ -700,17 +749,34 @@ local function updateCounter(dt: number)
 	counterScale.Scale = 1 + math.min(pulse, MAX_PULSE)
 	counterStroke.Thickness = 2 + 3 * glow
 	counterStroke.Transparency = 0.35 * (1 - glow)
-	local value = shownCoins()
-	local text = "+" .. Fmt.comma(value)
+	local value = walletCoins()
+	if lastValue >= 0 and value > lastValue and not arrivedNow then
+		-- 날아온 코인이 아닌 것으로 늘어남 (감사 코인·디버그): 살짝 커졌다 돌아옴
+		pulse = math.max(pulse, 0.08)
+		glow = math.max(glow, 0.4)
+	end
+	lastValue = value
+	arrivedNow = false
+	local text = Fmt.comma(value)
 	numberLabel.Text = text
 	fitNumber(text)
-	counter:SetAttribute("Shown", value)
+	-- 이번 비행으로 번 코인: 탄 사람에게 비행 ~ 정산 동안
+	local flight = shownCoins()
+	local showFlight = inFlight or (official ~= nil and State.phase() == "Results")
+	flightLabel.Visible = showFlight
+	if showFlight then
+		flightLabel.Text = "이번 비행 +" .. Fmt.comma(flight)
+	end
+	counter:SetAttribute("Wallet", value) -- 검사 도구가 봄
+	counter:SetAttribute("Shown", flight)
 	counter:SetAttribute("Landed", landed)
+	counter:SetAttribute("InFlight", inFlight)
 end
 
 function CoinFx.update(dt: number)
 	local phase = State.phase()
 	local crew = State.role() == "Crew"
+	local wallet = State.myNumber("Coins")
 	if phase ~= lastPhase then
 		local previous = lastPhase
 		lastPhase = phase
@@ -718,15 +784,19 @@ function CoinFx.update(dt: number)
 			clearSprites()
 			resetCount()
 			counting = crew
-			shown = crew
+			inFlight = crew
+			flightOver = false
+			walletBase = wallet
+			lastWallet = wallet
 		elseif previous == "Flight" and counting then
 			-- 비행이 끝남: 남은 코인을 모두 날려 보냄 (정산 값과 같아짐)
 			collect(true)
 			counting = false
+			flightOver = true
 		end
 		if phase == "Join" then
 			counting = false
-			shown = false
+			inFlight = false
 			clearSprites()
 			resetCount()
 		end
@@ -734,10 +804,15 @@ function CoinFx.update(dt: number)
 	if counting and phase == "Flight" then
 		collect(false)
 	end
-	counter.Visible = shown
-	if not shown then
-		return
+	if inFlight then
+		if wallet ~= lastWallet and not flightOver then
+			walletBase += wallet - lastWallet -- 비행 중에 따로 받거나 쓴 코인 (감사·디버그)
+		end
+		if official ~= nil and not counting and #sprites == 0 and wallet >= (walletAfter or 0) then
+			inFlight = false -- 정산 코인이 다 날아와 닿았고 서버의 보유 코인에도 들어감: 이제 그 값을 그대로 보임
+		end
 	end
+	lastWallet = wallet
 	animateSprites(dt)
 	animateEffects(dt)
 	if official ~= nil and not counting and #sprites == 0 then
@@ -763,16 +838,15 @@ function CoinFx.init()
 	-- 칸: 가운데를 기준으로 두어야 들어올 때 커지는 효과(UIScale)가 제자리에서 커짐
 	counter = Ui.panel(root, "CoinCounter", {
 		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.new(0.5, CoinFx.Left + CoinFx.Width / 2, 0, CoinFx.Top + CoinFx.Height / 2),
+		Position = UDim2.new(1, -(CoinFx.Right + CoinFx.Width / 2), 0, CoinFx.Top + CoinFx.Height / 2),
 		Size = UDim2.fromOffset(CoinFx.Width, CoinFx.Height),
 		BackgroundTransparency = 0.3,
-		Visible = false,
 	})
 	counterStroke = Ui.stroke(counter, GOLD, 2, 0.35)
 	counterScale = Ui.make("UIScale", { Parent = counter })
 	local icon = makeCoin(counter, "CoinIcon", ICON, nil, nil)
 	icon.Position = UDim2.fromOffset(ICON_X + ICON / 2, CoinFx.Height / 2)
-	Ui.label(counter, "CoinCaption", "이번 비행 코인", CAPTION_SIZE, {
+	Ui.label(counter, "CoinCaption", "보유 코인", CAPTION_SIZE, {
 		Position = UDim2.fromOffset(TEXT_X, 3),
 		Size = UDim2.fromOffset(TEXT_WIDTH, 13),
 		Font = Ui.FontLight,
@@ -780,7 +854,15 @@ function CoinFx.init()
 		TextXAlignment = Enum.TextXAlignment.Left,
 		TextStrokeTransparency = 0.5,
 	})
-	numberLabel = Ui.label(counter, "CoinCount", "+0", NUMBER_SIZE, {
+	flightLabel = Ui.label(counter, "CoinFlight", "", CAPTION_SIZE, {
+		Position = UDim2.fromOffset(TEXT_X, 3),
+		Size = UDim2.fromOffset(TEXT_WIDTH, 13),
+		TextColor3 = GOLD_LIGHT,
+		TextXAlignment = Enum.TextXAlignment.Right,
+		TextStrokeTransparency = 0.5,
+		Visible = false,
+	})
+	numberLabel = Ui.label(counter, "CoinCount", "0", NUMBER_SIZE, {
 		Position = UDim2.fromOffset(TEXT_X, 14),
 		Size = UDim2.fromOffset(TEXT_WIDTH, 24),
 		TextColor3 = C.Yellow,
@@ -803,9 +885,17 @@ function CoinFx.init()
 	end
 	folder.Parent = SoundService
 
+	State.on("FlightEnd", function(_info: any)
+		flightOver = true
+	end)
 	State.on("Results", function(data: any)
 		if type(data) == "table" and type(data.me) == "table" and type(data.me.coins) == "number" then
 			official = data.me.coins
+			if type(data.me.wallet) == "number" then
+				walletAfter = data.me.wallet
+				-- 정산 전 보유 코인 (비행 중 따로 받은 코인 포함). 신호가 어떤 순서로 와도 끝 숫자가 서버와 같게 다시 맞춤
+				walletBase = data.me.wallet - data.me.coins
+			end
 			counter:SetAttribute("Official", data.me.coins)
 		end
 	end)

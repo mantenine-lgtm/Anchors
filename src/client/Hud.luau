@@ -186,11 +186,12 @@ local function buildBanner()
 	})
 end
 
+-- 티켓 (보유 코인은 이 칸 왼쪽의 '보유 코인' 칸, CoinFx.luau)
 local function buildWallet()
 	local wallet = Ui.panel(root, "Wallet", {
 		AnchorPoint = Vector2.new(1, 0),
 		Position = UDim2.new(1, -16, 0, 12),
-		Size = UDim2.fromOffset(250, 40),
+		Size = UDim2.fromOffset(130, 40),
 	})
 	walletLabel = Ui.label(wallet, "Text", "", 19, {})
 end
@@ -881,7 +882,7 @@ function Hud.update(_dt: number)
 	local clock = os.clock()
 	updateBanner(phase)
 
-	walletLabel.Text = string.format("티켓 %d  ·  코인 %s", State.myNumber("Tickets"), Fmt.comma(State.myNumber("Coins")))
+	walletLabel.Text = string.format("티켓 %d", State.myNumber("Tickets"))
 
 	placeUnderBoard()
 

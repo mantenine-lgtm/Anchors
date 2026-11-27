@@ -970,6 +970,7 @@ local function runResults(round: any)
 			me = {
 				coins = coins,
 				goldenCoins = goldenCoins, -- 코인 중 황금 항로로 더 받은 몫
+				wallet = getNumber(player, "Coins"), -- 정산 코인을 더한 보유 코인 (화면의 보유 코인이 두 번 세지 않게)
 				tickets = tickets,
 				contributionKm = contributions[member.id] or 0,
 				rank = rank, -- 사람끼리의 순위 (영웅 시상과 같은 기준)
