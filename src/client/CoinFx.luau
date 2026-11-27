@@ -498,12 +498,14 @@ local function arrive(sprite: Sprite)
 	burst.left -= 1
 	pulse = math.max(pulse, 0.04 + (MAX_PULSE - 0.04) * burst.power)
 	glow = math.max(glow, burst.power)
-	-- 소리: 무더기 안에서 뒤로 갈수록 높아지고, 큰 무더기일수록 크고 높음
+	-- 소리: 작은 코인은 원래 높이 가까이(1.0~1.1). 무더기 안에서 뒤로 갈수록, 큰 무더기일수록 크고 조금 높게 (1.3 까지)
 	local progress = sprite.index / math.max(burst.count, 1)
 	if burst.id == nil and burst.power < 0.6 then
-		playSound(2.5 + rng:NextNumber() * 0.25, FX.SoundVolume * 0.5)
+		playSound(FX.SoundSpeedMin + rng:NextNumber() * 0.1, FX.SoundVolume * 0.5)
 	else
-		playSound(2.2 + 0.9 * progress * (0.4 + burst.power) + rng:NextNumber() * 0.1, FX.SoundVolume + 0.3 * burst.power)
+		local rise = math.clamp(progress * (0.4 + 0.6 * burst.power), 0, 1)
+		local speed = FX.SoundSpeedMin + (FX.SoundSpeedMax - FX.SoundSpeedMin - 0.05) * rise + rng:NextNumber() * 0.05
+		playSound(speed, FX.SoundVolume + 0.3 * burst.power)
 	end
 	if not burst.landed then
 		burst.landed = true
@@ -517,7 +519,7 @@ local function arrive(sprite: Sprite)
 		end
 		if burst.power >= (if boost then 0.55 else 0.8) then
 			sparks(burst)
-			playSound(1.5, FX.SoundVolume + 0.4 * burst.power, true)
+			playSound(FX.SoundAccentSpeed, FX.SoundVolume + 0.4 * burst.power, true)
 		end
 		if boost and burst.power >= 0.8 then
 			gleam(burst.power)
