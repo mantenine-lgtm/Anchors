@@ -20,6 +20,7 @@ local Scoring = require(Shared:WaitForChild("Scoring"))
 local Assembly = require(script.Parent.Assembly)
 local Bots = require(script.Parent.Bots)
 local Metrics = require(script.Parent.Metrics)
+local PartProgress = require(script.Parent.PartProgress)
 local Seating = require(script.Parent.Seating)
 local World = require(script.Parent.World)
 
@@ -33,9 +34,10 @@ type Member = {
 	player: Player?,
 	isBot: boolean,
 	botIndex: number,
-	seat: number,
+	seat: number, -- 승무원 번호 = 탑승 자리 번호 (속성 Seat). 의자는 없지만 조립 그리드·클로즈업·하트가 이 번호로 사람을 알아봄
 	isCaptain: boolean,
 	loadout: { [string]: number },
+	parts: Parts.PartLevels?, -- '각자 부품'일 때 사람의 부품 레어도·레벨 (조립 화면에 보임)
 	power: number,
 	successes: number,
 	attempts: number,
@@ -107,6 +109,31 @@ local function currentPlanetId(): string
 	return if typeof(id) == "string" then id else ""
 end
 
+-- 다음 행성 슬롯: 정산을 시작할 때 다음 판 행성을 미리 뽑고, 슬롯이 돌기 시작하는 시각·멈추는 시각을 알림.
+-- 화면(PlanetSlot.luau)은 SlotFrom(뺀 행성 = 지금 행성)으로 확률표를 만들고, SlotSeed 로 칸 순서를 섞어
+-- 모든 사람이 같은 슬롯을 보다가 SlotStopAt 에 NextPlanet 에서 멈춥니다. 바뀌는 것은 판이 끝날 때(cleanup)입니다.
+-- 쓰는 순서: 행성·씨앗을 먼저, 시작 시각(SlotStartAt)을 맨 나중에 (화면은 시작 시각이 오면 나머지를 읽음)
+local function rollNextPlanet(resultsSeconds: number)
+	local from = currentPlanetId()
+	local planet = Planets.pick(from, planetRng)
+	local spin = Config.PlanetSlot.Spin
+	local startAfter = math.clamp(Config.PlanetSlot.StartAfter, 0, math.max(0, resultsSeconds - spin - 1))
+	local startAt = now() + startAfter
+	state:SetAttribute("NextPlanet", planet.Id)
+	state:SetAttribute("SlotFrom", from)
+	state:SetAttribute("SlotSeed", planetRng:NextInteger(1, 999999))
+	state:SetAttribute("SlotStopAt", startAt + spin)
+	state:SetAttribute("SlotStartAt", startAt)
+end
+
+local function clearSlot()
+	state:SetAttribute("SlotStartAt", 0)
+	state:SetAttribute("SlotStopAt", 0)
+	state:SetAttribute("NextPlanet", "")
+	state:SetAttribute("SlotFrom", "")
+	state:SetAttribute("SlotSeed", 0)
+end
+
 local function consumeSkip(): boolean
 	if skipRequested then
 		skipRequested = false
@@ -149,7 +176,9 @@ local function resetFlightState()
 		state:SetAttribute(Boosters.usedAttribute(info.Id), false)
 		state:SetAttribute(Boosters.byAttribute(info.Id), "")
 		state:SetAttribute(Boosters.untilAttribute(info.Id), -1)
+		state:SetAttribute(Boosters.extraAttribute(info.Id), 0)
 	end
+	state:SetAttribute("GoldenFromKm", -1) -- 황금 항로를 쓴 지점 (안 썼으면 -1)
 	state:SetAttribute("Escaped", false)
 end
 
@@ -218,8 +247,16 @@ local function runJoin(): { Player }
 end
 
 -- ------------------------------------------------------------ 빌드
+-- 장비 묶음이 '각자 부품'(Own)이면 사람은 조립이 시작할 때의 자기 부품 레어도·레벨로, 봇과 다른 묶음은 묶음 장비로
 local function newMember(id: string, name: string, player: Player?, botIndex: number): Member
-	local loadout = Parts.loadout(options.gear)
+	local parts: Parts.PartLevels? = nil
+	local loadout
+	if player and Parts.preset(options.gear).Own then
+		parts = PartProgress.parts(player.UserId)
+		loadout = Parts.ownLoadout(parts :: Parts.PartLevels)
+	else
+		loadout = Parts.loadout(options.gear)
+	end
 	return {
 		id = id,
 		name = name,
@@ -230,6 +267,7 @@ local function newMember(id: string, name: string, player: Player?, botIndex: nu
 		seat = 0,
 		isCaptain = false,
 		loadout = loadout,
+		parts = parts,
 		power = Parts.loadoutPower(loadout),
 		successes = 0,
 		attempts = 0,
@@ -326,6 +364,7 @@ local function runBuild(joined: { Player }): any
 			local member = newMember("p" .. tostring(player.UserId), player.DisplayName, player, 0)
 			table.insert(crew, member)
 			byPlayer[player] = member
+			player:SetAttribute("Afk", false) -- 자리 비움(코인 절반)은 판마다 새로 판정
 		end
 	end
 	if #crew == 0 then
@@ -337,9 +376,10 @@ local function runBuild(joined: { Player }): any
 		table.insert(crew, newMember("b" .. tostring(i), Bots.name(i), nil, i))
 	end
 
-	-- 좌석: 선장은 맨 윗줄 가운데, 나머지는 윗줄부터 채우고 줄 안에서는 가운데부터 (사람 먼저, 그다음 봇)
+	-- 탑승 자리(= 승무원 번호 member.seat): 선장은 선실 가운데, 나머지는 가운데에서 가까운 자리부터 (사람 먼저, 그다음 봇).
+	-- 탑승한 뒤로는 선실 안을 자유롭게 걸어다닙니다(의자 없음).
 	local captain = pickCaptain(crew)
-	local order = World.buildSeats(#crew)
+	local order = World.buildSpots(#crew)
 	local nextSeat = 1
 	if captain then
 		captain.isCaptain = true
@@ -357,7 +397,7 @@ local function runBuild(joined: { Player }): any
 	for _, member in ipairs(crew) do
 		local player = member.player
 		if player then
-			Seating.seat(player, member.seat, member.isCaptain)
+			Seating.board(player, member.seat, member.isCaptain)
 		else
 			Bots.place(member.botIndex, member.seat)
 		end
@@ -465,6 +505,13 @@ local function syncFlight(round: any)
 	state:SetAttribute("WaveSpeed", sim.w)
 	state:SetAttribute("Boost", sim.boost)
 	state:SetAttribute("Stage", Route.stageIndex(sim.x))
+	-- 부스터마다 지금까지 늘린 거리 (그 부스터 하나만 안 쓴 비행과의 차이). 화면의 코인 연출이 부스터로 더 번 코인을 나눠 보여 줌
+	for _, item in ipairs(round.items) do
+		local shadow = item.shadow
+		if shadow then
+			state:SetAttribute(Boosters.extraAttribute(item.id), math.max(0, sim.x - shadow.x))
+		end
+	end
 end
 
 local function updateCrisis(round: any)
@@ -524,6 +571,10 @@ local function resolveMission(round: any, mission: any): number
 			end
 			if member.noInput >= Config.Mission.AfkMissions then
 				member.afk = true
+				local player = member.player
+				if player then
+					player:SetAttribute("Afk", true) -- 화면의 이번 비행 코인도 절반으로
+				end
 			end
 			if member.noInput >= Config.Mission.AfkMissions then
 				-- 자리 비움: 판정에서 빠짐
@@ -585,6 +636,26 @@ local function stepShadows(round: any, rate: number?)
 	end
 end
 
+-- 비행 중 부품 경험치 (밸런스 스레드 11-27: 거리 말고 시간 기준). 지난번에 준 뒤로 흐른 비행 시간 × ExpPerSecond 를
+-- 탄 사람(나가지 않은 사람)의 부품 6개에 주고 그 사람에게 알림. 봇·관전자는 없음. force 가 아니면 SendInterval 초마다 한 번만.
+local function awardPartExp(round: any, force: boolean)
+	local sim = round.sim
+	if not force and sim.t - round.expAt < Config.Progress.SendInterval - 1e-6 then -- 1e-6: 비행 시각을 더해 가며 생기는 오차
+		return
+	end
+	local gain = (sim.t - round.expAt) * Config.Progress.ExpPerSecond
+	round.expAt = sim.t
+	if not (gain > 0) then
+		return
+	end
+	for _, member in ipairs(round.crew) do
+		local player = member.player
+		if player and not member.left and player.Parent == Players then
+			PartProgress.send(player, PartProgress.award(player.UserId, gain))
+		end
+	end
+end
+
 local function runFlight(round: any)
 	local sim = FlightSim.new(round.totals, round.captainBonus)
 	round.sim = sim
@@ -601,6 +672,7 @@ local function runFlight(round: any)
 
 	local dt = Config.Flight.Dt
 	local missionIndex = 1
+	round.expAt = sim.t -- 부품 경험치를 마지막으로 준 비행 시각
 	local resolveAt = Missions.resolveTime(1)
 	local accumulator = 0
 	local lastSync = 0
@@ -670,6 +742,7 @@ local function runFlight(round: any)
 			lastSync = sim.t
 			syncFlight(round)
 		end
+		awardPartExp(round, false)
 		if consumeSkip() or sim.t >= Config.Phase.FlightMax then
 			sim.ended = true
 		end
@@ -678,6 +751,7 @@ local function runFlight(round: any)
 	round.ended = true
 	round.mission = nil
 	syncFlight(round)
+	awardPartExp(round, true)
 	state:SetAttribute("Crisis", false)
 	state:SetAttribute("Escaped", sim.escaped)
 	Net.event("FlightEnd"):FireAllClients({
@@ -740,6 +814,7 @@ local function useBooster(round: any, member: Member, boosterId: string): (boole
 	FlightSim.applyBooster(sim, boosterId)
 	if boosterId == "Golden" then
 		round.goldenFromKm = sim.x
+		state:SetAttribute("GoldenFromKm", sim.x) -- 화면의 이번 비행 코인도 정산과 같이 계산하도록
 	end
 	local item = {
 		id = boosterId,
@@ -955,6 +1030,7 @@ local function runResults(round: any)
 			me = {
 				coins = coins,
 				goldenCoins = goldenCoins, -- 코인 중 황금 항로로 더 받은 몫
+				wallet = getNumber(player, "Coins"), -- 정산 코인을 더한 보유 코인 (화면의 보유 코인이 두 번 세지 않게)
 				tickets = tickets,
 				contributionKm = contributions[member.id] or 0,
 				rank = rank, -- 사람끼리의 순위 (영웅 시상과 같은 기준)
@@ -991,15 +1067,16 @@ local function runResults(round: any)
 	lastKingUserId = if kingId then memberById[kingId].userId else 0
 	lastCaptainUserId = if round.captain then round.captain.userId else 0
 
+	rollNextPlanet(Config.Phase.Results)
 	setPhase("Results", Config.Phase.Results)
 	waitPhase(Config.Phase.Results)
 end
 
--- 판 정리: 좌석·봇을 치우고 모두 발사장으로
+-- 판 정리: 탑승 자리·봇을 치우고 모두 발사장으로
 local function cleanup()
 	current = nil
 	Bots.clear()
-	World.clearSeats()
+	World.clearSpots()
 	Assembly.clear(state)
 	showBuild(nil, "")
 	state:SetAttribute("CrewCount", 0)
@@ -1008,8 +1085,17 @@ local function cleanup()
 	state:SetAttribute("CaptainSeat", 0)
 	resetFlightState()
 	Seating.releaseAll()
-	-- 다음 판은 다른 행성에서 (모두 발사장으로 돌아간 뒤에 바꿈)
-	setPlanet(Planets.pick(currentPlanetId(), planetRng))
+	-- 다음 판은 정산 때 슬롯으로 뽑은 행성에서 (모두 발사장으로 돌아간 뒤에 바꿈).
+	-- 비행 전에 끝난 판(아무도 안 탐)은 슬롯이 없었으므로 행성을 그대로 둠.
+	local nextId = state:GetAttribute("NextPlanet")
+	if typeof(nextId) == "string" and nextId ~= "" then
+		local planet = Planets.get(nextId)
+		if planet.Id == currentPlanetId() then
+			planet = Planets.pick(currentPlanetId(), planetRng) -- 그사이 디버그로 같은 행성이 됐으면 다시 뽑음
+		end
+		setPlanet(planet)
+	end
+	clearSlot()
 end
 
 local function runRound()
@@ -1033,6 +1119,7 @@ local function onPlayerAdded(player: Player)
 	player:SetAttribute("Joined", false)
 	player:SetAttribute("Seat", 0)
 	player:SetAttribute("Captain", false)
+	player:SetAttribute("Afk", false)
 	player:SetAttribute("SpawnIndex", #Players:GetPlayers())
 	-- 시프트 락을 켜면 마우스가 화면 가운데에 묶여 탑승 버튼을 누를 수 없으므로 끔 (이 값은 서버에서만 바꿀 수 있음)
 	pcall(function()
@@ -1131,6 +1218,20 @@ local function connectRemotes()
 		end
 	end)
 
+	-- 내 부품 레벨·경험치를 다시 보내 달라 (화면이 처음 뜰 때). 너무 자주 오면 무시
+	local progressAsked: { [Player]: number } = {}
+	Net.event("PartProgress").OnServerEvent:Connect(function(player: Player)
+		local t = now()
+		if t - (progressAsked[player] or -math.huge) < 0.5 then
+			return
+		end
+		progressAsked[player] = t
+		PartProgress.send(player)
+	end)
+	Players.PlayerRemoving:Connect(function(player: Player)
+		progressAsked[player] = nil
+	end)
+
 	Net.event("UseItem").OnServerEvent:Connect(function(player: Player, itemId: any)
 		local round = current
 		local info = Boosters.get(itemId)
@@ -1188,6 +1289,7 @@ function Round.start()
 	resetFlightState()
 	showOptions()
 	setPlanet(Planets.pick("", planetRng))
+	clearSlot()
 	state.Parent = ReplicatedStorage
 
 	connectRemotes()

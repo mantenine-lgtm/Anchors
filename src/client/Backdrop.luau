@@ -6,6 +6,7 @@
 --  · 별빛 줄기: 대기권을 벗어난 뒤에만, 속도가 빠를수록 빠르게 아래로 흐름 (발사 전에는 천천히 떠오르는 불티)
 --  · 하늘: 스테이지마다 빛과 안개 색이 바뀜, 폭풍 구름층에서는 번개
 --  · 위기: 경보등이 깜박이고 화면이 붉어짐
+--  · 엔진 불꽃과 추진운은 Exhaust.luau
 -- 전부 내 화면에서만 바꾸는 것이라 다른 사람에게 영향이 없습니다.
 
 local Lighting = game:GetService("Lighting")
@@ -35,8 +36,8 @@ local STREAK_RADIUS_MAX = 220
 local STREAK_CLEARANCE = 15 -- 바깥 시점 카메라 바로 옆으로는 지나가지 않음
 local CLOUD_COUNT = 9
 
--- 마찰 열: 원래 부품 위에 살짝 큰 빛나는 껍데기를 씌워 달아오르게 보임. 숫자는 부위별 열 비율(코 끝이 가장 뜨거움)
-local HEAT_PARTS = { NoseTip = 1, Nose4 = 1, Nose3 = 0.9, Nose2 = 0.75, Nose1 = 0.6, UpperHull = 0.3 }
+-- 마찰 열: 원래 부품 위에 살짝 큰 빛나는 껍데기를 씌워 달아오르게 보임.
+-- 부위별 열 비율(0~1, 코 끝이 가장 뜨거움)은 선체 파트의 숫자 속성 Heat (server/RocketShell.luau 가 붙임)
 local HEAT_GLOW_ALPHA = 0.9 -- 가장 뜨거울 때 껍데기의 진하기
 local HEAT_PANE_ALPHA = 0.45 -- 외창 바깥면 (선실에서 외창 너머가 붉게 보이는 정도)
 local HEAT_DIM = Color3.fromRGB(150, 26, 8)
@@ -58,29 +59,31 @@ type Sky = {
 
 -- 스테이지별 하늘. 5번째부터는 우주.
 -- Density(안개 짙기)가 높으면 빛줄기·구름과 충격파가 흐려지므로 너무 올리지 않습니다.
+-- Ambient 는 하늘이 가린 곳(선실 안), Outdoor 는 바깥의 빛입니다. 선실이 바깥보다 어둡게 Ambient 는 Outdoor 의 38% 쯤
+-- (행성 하늘도 같음. 바깥이 아주 어두운 단계는 가장 밝은 색 성분이 40 이 되게 해서 선실이 너무 어둡지 않게)
 local SKIES: { Sky } = {
 	{ -- 붕괴하는 고향 행성: 노을빛 먼지
-		ClockTime = 17.6, Brightness = 2, Ambient = Color3.fromRGB(96, 92, 104), Outdoor = Color3.fromRGB(128, 116, 112),
+		ClockTime = 17.6, Brightness = 2, Ambient = Color3.fromRGB(52, 48, 46), Outdoor = Color3.fromRGB(138, 126, 120),
 		Density = 0.3, Haze = 2.2, Color = Color3.fromRGB(230, 150, 110), Decay = Color3.fromRGB(120, 60, 40),
 		Streak = Color3.fromRGB(255, 240, 205), Clouds = 0.25,
 	},
 	{ -- 폭풍 구름층: 어둡고 푸른 구름
-		ClockTime = 18.4, Brightness = 0.9, Ambient = Color3.fromRGB(58, 62, 78), Outdoor = Color3.fromRGB(60, 64, 80),
+		ClockTime = 18.4, Brightness = 1, Ambient = Color3.fromRGB(30, 32, 40), Outdoor = Color3.fromRGB(70, 74, 92),
 		Density = 0.38, Haze = 2.8, Color = Color3.fromRGB(90, 96, 116), Decay = Color3.fromRGB(40, 44, 60),
 		Streak = Color3.fromRGB(205, 225, 255), Clouds = 1,
 	},
 	{ -- 화산재 하늘: 붉은 재
-		ClockTime = 18.7, Brightness = 1.1, Ambient = Color3.fromRGB(80, 56, 52), Outdoor = Color3.fromRGB(96, 64, 56),
+		ClockTime = 18.7, Brightness = 1.2, Ambient = Color3.fromRGB(40, 27, 24), Outdoor = Color3.fromRGB(106, 70, 62),
 		Density = 0.34, Haze = 2.6, Color = Color3.fromRGB(150, 80, 60), Decay = Color3.fromRGB(70, 30, 24),
 		Streak = Color3.fromRGB(255, 205, 150), Clouds = 0.7,
 	},
 	{ -- 오로라 하늘
-		ClockTime = 21, Brightness = 0.8, Ambient = Color3.fromRGB(50, 70, 84), Outdoor = Color3.fromRGB(40, 70, 80),
+		ClockTime = 21, Brightness = 0.9, Ambient = Color3.fromRGB(21, 35, 40), Outdoor = Color3.fromRGB(48, 80, 92),
 		Density = 0.2, Haze = 0.6, Color = Color3.fromRGB(70, 160, 150), Decay = Color3.fromRGB(30, 60, 90),
 		Streak = Color3.fromRGB(200, 255, 230), Clouds = 0,
 	},
 	{ -- 우주
-		ClockTime = 0, Brightness = 0.6, Ambient = Color3.fromRGB(46, 48, 66), Outdoor = Color3.fromRGB(30, 32, 48),
+		ClockTime = 0, Brightness = 0.7, Ambient = Color3.fromRGB(26, 27, 40), Outdoor = Color3.fromRGB(36, 38, 56),
 		Density = 0.02, Haze = 0, Color = Color3.fromRGB(20, 22, 40), Decay = Color3.fromRGB(10, 10, 20),
 		Streak = Color3.fromRGB(215, 235, 255), Clouds = 0,
 	},
@@ -89,9 +92,9 @@ local SKIES: { Sky } = {
 local container: Folder
 
 local wave: Part
-local waveY = -440
-local flame: Part
-local flameLight: PointLight
+-- 멀리 있을 때의 충격파 높이: 바깥 시점 화면 아래 끝보다 낮아서 안 보임. 다가오면(도달 30초 이내) 올라와 보이기 시작
+local WAVE_FAR_Y = -1150
+local waveY = WAVE_FAR_Y
 
 type Streak = {
 	part: Part,
@@ -152,22 +155,6 @@ local function buildWave()
 	wave.Transparency = 1
 	wave.Size = Vector3.new(6, 2040, 2040)
 	wave.CFrame = CFrame.new(0, waveY, 0) * CFrame.Angles(0, 0, math.rad(90))
-end
-
-local function buildFlame()
-	flame = localPart("EngineFlame", container)
-	flame.Shape = Enum.PartType.Cylinder
-	flame.Material = Enum.Material.Neon
-	flame.Color = Color3.fromRGB(255, 190, 90)
-	flame.Transparency = 1
-	flame.Size = Vector3.new(60, 26, 26)
-	flame.CFrame = CFrame.new(0, W.MountHeight - 26, 0) * CFrame.Angles(0, 0, math.rad(90))
-	flameLight = Instance.new("PointLight")
-	flameLight.Color = Color3.fromRGB(255, 170, 90)
-	flameLight.Range = 60
-	flameLight.Brightness = 0
-	flameLight.Shadows = false
-	flameLight.Parent = flame
 end
 
 -- 로켓 둘레에 놓일 방향(각도)을 뽑음. 구름 공이나 빛줄기가 바깥 시점 카메라를 덮으면 화면이 갑자기
@@ -242,23 +229,42 @@ local function findRocketParts()
 			if light then
 				table.insert(lamps, light)
 			end
-		elseif item:IsA("Part") and HEAT_PARTS[item.Name] then
-			-- 마찰 열 껍데기: 같은 모양으로 조금 크게
-			local glow = localPart("HeatGlow", container)
-			glow.Shape = item.Shape
-			glow.Material = Enum.Material.Neon
-			glow.Transparency = 1
-			glow.Size = item.Size + (if item.Shape == Enum.PartType.Ball then Vector3.new(0.8, 0.8, 0.8) else Vector3.new(0.2, 0.8, 0.8))
-			glow.CFrame = item.CFrame
-			table.insert(glows, { part = glow, weight = HEAT_PARTS[item.Name], alpha = HEAT_GLOW_ALPHA })
-			if item.Name == "NoseTip" then
-				local light = Instance.new("PointLight")
-				light.Range = 45
-				light.Brightness = 0
-				light.Shadows = false
-				light.Parent = glow
-				heatLight = light
-			end
+		end
+	end
+	-- 마찰 열 껍데기: Heat 속성이 있는 선체 파트마다 같은 모양(쐐기는 쐐기)으로 조금 크게
+	for _, item in ipairs(rocket:GetDescendants()) do
+		local weight = item:GetAttribute("Heat")
+		if not item:IsA("BasePart") or type(weight) ~= "number" then
+			continue
+		end
+		local glow: BasePart
+		if item:IsA("Part") then
+			local shell = localPart("HeatGlow", container)
+			shell.Shape = item.Shape
+			shell.Size = item.Size + (if item.Shape == Enum.PartType.Cylinder then Vector3.new(0.2, 0.8, 0.8) else Vector3.new(0.8, 0.8, 0.8))
+			glow = shell
+		else
+			glow = Instance.new(item.ClassName) :: BasePart
+			glow.Name = "HeatGlow"
+			glow.Anchored = true
+			glow.CanCollide = false
+			glow.CanQuery = false
+			glow.CanTouch = false
+			glow.CastShadow = false
+			glow.Size = item.Size + Vector3.new(0.8, 0.8, 0.8)
+			glow.Parent = container
+		end
+		glow.Material = Enum.Material.Neon
+		glow.Transparency = 1
+		glow.CFrame = item.CFrame
+		table.insert(glows, { part = glow, weight = math.clamp(weight, 0, 1), alpha = HEAT_GLOW_ALPHA })
+		if item.Name == "NoseTip" and heatLight == nil then
+			local light = Instance.new("PointLight")
+			light.Range = 45
+			light.Brightness = 0
+			light.Shadows = false
+			light.Parent = glow
+			heatLight = light
 		end
 	end
 	-- 외창 바깥면: 유리판마다 선체 바깥면 바로 밖에 빛나는 판 (선실에서는 외창 너머가 붉게, 바깥에서는 외창이 달아올라 보임)
@@ -392,7 +398,6 @@ function Backdrop.init()
 
 	sky = table.clone(homeSky())
 	buildWave()
-	buildFlame()
 	buildStreaks()
 	task.spawn(findRocketParts)
 
@@ -541,27 +546,15 @@ function Backdrop.update(dt: number)
 		end
 	end
 
-	-- 엔진 불꽃
-	if flying then
-		local flicker = 0.85 + 0.3 * math.noise(clock * 14, 3.1)
-		local flameLength = 70 * flicker
-		flame.Transparency = 0.15
-		flame.Size = Vector3.new(flameLength, 24, 24)
-		flame.CFrame = CFrame.new(0, W.MountHeight + 4 - flameLength / 2, 0) * CFrame.Angles(0, 0, math.rad(90))
-		flameLight.Brightness = 3 * flicker
-	else
-		flame.Transparency = 1
-		flameLight.Brightness = 0
-	end
-
-	-- 충격파: 도달 예상 시간이 짧을수록 선실 바닥 가까이 올라옴
-	local targetY = -440
+	-- 충격파: 도달 예상 시간이 짧을수록 선실 바닥 가까이 올라옴.
+	-- 위기(10초 이내)에는 로켓 밑동 아래에서 선실 바닥까지(선실 외창에 보임), 그 전에는 바깥 시점 화면 아래 끝에서 로켓 밑동까지
+	local targetY = WAVE_FAR_Y
 	local waveVisible = false
 	if flying then
 		waveVisible = true
 		local eta = math.clamp(State.number("Eta"), 0, Config.Crisis.EtaLimit)
-		local below = if eta <= 10 then eta * 23.4 else 234 + (eta - 10) * 16.3
-		targetY = math.max(W.CabinFloorY - below, -440)
+		local below = if eta <= 10 then eta * 23.4 else 234 + (eta - 10) * 51.8
+		targetY = math.max(W.CabinFloorY - below, WAVE_FAR_Y)
 	elseif phase == "Results" and caughtAt > 0 then
 		-- 따라잡힘: 충격파가 선실을 덮고 지나감
 		waveVisible = true
@@ -573,7 +566,7 @@ function Backdrop.update(dt: number)
 		wave.Transparency = 0.12
 		wave.CFrame = CFrame.new(0, waveY, 0) * CFrame.Angles(0, 0, math.rad(90))
 	else
-		waveY = -440
+		waveY = WAVE_FAR_Y
 		wave.Transparency = 1
 	end
 end

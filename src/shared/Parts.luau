@@ -1,5 +1,6 @@
 --!strict
--- 부품 파워 계산. 데모 1은 모두 같은 장비 묶음을 종류별 1개씩 꽂습니다(그리드·시너지 없음).
+-- 부품 파워 계산. 사람마다 종류별 1개씩 꽂습니다 (시너지 없음). 장비 묶음이 '각자 부품'이면 사람은 자기 부품의
+-- 레어도·레벨(PartProgress), 봇은 묶음 장비. 다른 묶음은 시험용으로 모두 같은 장비.
 
 local Config = require(script.Parent.Config)
 
@@ -10,12 +11,22 @@ local Parts = {}
 -- 한 사람의 부품: 종류 Id -> 파워
 export type Loadout = { [string]: number }
 
-export type GearPreset = { Id: string, Name: string, Rarity: number, Level: number }
+export type GearPreset = { Id: string, Name: string, Rarity: number, Level: number, Own: boolean? }
 
+-- 부품 하나의 레어도·레벨 (종류 Id -> 이것)
+export type PartLevels = { [string]: { rarity: number, level: number } }
+
+-- 레벨 배율 (밸런스 스레드 11-27): 10^((레벨−1)/(만렙−1)). Lv1 ×1, Lv1,000 ×1.26, Lv5,000 ×3.16, Lv10,000 ×10
+function Parts.levelMultiplier(level: number): number
+	local max = Config.Progress.MaxLevel
+	local l = math.clamp(math.floor(level), 1, max)
+	return 10 ^ ((l - 1) / (max - 1))
+end
+
+-- 파워 = 레어도 기본값 × 레벨 배율
 function Parts.power(rarity: number, level: number): number
-	local r = math.clamp(rarity, 1, #P.RarityPower)
-	local l = math.clamp(level, 1, #P.LevelMultiplier)
-	return P.RarityPower[r] * P.LevelMultiplier[l]
+	local r = math.clamp(math.floor(rarity), 1, #P.RarityPower)
+	return P.RarityPower[r] * Parts.levelMultiplier(level)
 end
 
 function Parts.preset(id: string): GearPreset
@@ -34,6 +45,16 @@ function Parts.loadout(presetId: string): Loadout
 	local loadout: Loadout = {}
 	for _, partType in ipairs(P.Types) do
 		loadout[partType.Id] = power
+	end
+	return loadout
+end
+
+-- 자기 부품(종류별 레어도·레벨)을 종류별 1개씩 든 사람의 부품. 없는 종류는 일반 Lv1
+function Parts.ownLoadout(parts: PartLevels): Loadout
+	local loadout: Loadout = {}
+	for _, partType in ipairs(P.Types) do
+		local part = parts[partType.Id]
+		loadout[partType.Id] = if part then Parts.power(part.rarity, part.level) else Parts.power(1, 1)
 	end
 	return loadout
 end

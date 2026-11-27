@@ -135,4 +135,33 @@ function Scoring.coins(distanceKm: number, afk: boolean, goldenKm: number?, gold
 	return coins
 end
 
+-- 비행 중 화면에 보여 줄 이번 비행 코인 (정산의 Scoring.coins 와 같은 계산, 자리 비움 반영 전)과 그중 부스터마다의 몫.
+-- km: 지금 거리. goldenFromKm: 황금 항로를 쓴 지점 (안 썼으면 nil). extraKm: 부스터 Id -> 그 부스터로 늘린 거리
+-- (그 부스터 하나만 안 쓴 비행과의 차이. 서버가 Boosters.extraAttribute 로 알려 줌).
+-- 황금 항로 몫은 정산의 '(황금 항로 +N)'과 같은 계산입니다. 나머지 부스터 몫은 늘린 거리의 코인이고, 그 합이 황금 항로를
+-- 뺀 코인보다 크면(부스터끼리 효과가 겹칠 때) 같은 비율로 줄입니다. 거리 코인 = 총 코인 - 부스터 몫의 합.
+function Scoring.liveCoins(km: number, goldenFromKm: number?, goldenMultiplier: number, extraKm: { [string]: number }): (number, { [string]: number })
+	local goldenKm = if goldenFromKm ~= nil then math.max(0, km - goldenFromKm) else 0
+	local total = Scoring.coins(km, false, goldenKm, goldenMultiplier)
+	local plain = Scoring.coins(km, false)
+	local shares: { [string]: number } = {}
+	if goldenFromKm ~= nil then
+		shares.Golden = total - plain
+	end
+	local raw: { [string]: number } = {}
+	local sum = 0
+	for id, extra in pairs(extraKm) do
+		if id ~= "Golden" and extra > 0 then
+			local coins = extra * Config.Rewards.CoinsPerKm
+			raw[id] = coins
+			sum += coins
+		end
+	end
+	local scale = if sum > plain and sum > 0 then plain / sum else 1
+	for id, coins in pairs(raw) do
+		shares[id] = math.floor(coins * scale)
+	end
+	return total, shares
+end
+
 return Scoring

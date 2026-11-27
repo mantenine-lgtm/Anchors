@@ -30,7 +30,15 @@ local TYPE_STYLE: { [string]: { Color: Color3, Desc: string } } = {
 	nav = { Color = Color3.fromRGB(226, 230, 242), Desc = "미션 성공 가속" },
 	core = { Color = Color3.fromRGB(255, 206, 84), Desc = "콤보 배율" },
 }
+BuildUi.TypeStyle = TYPE_STYLE -- 선실 부품 장착판(PartsBoard)도 같은 색을 씀
 local STARS = { "★", "★★", "★★★", "★★★★" } -- 레어도 (일반·희귀·영웅·전설)
+-- 내 부품 표시 색 (Nick 11-27: 현황판에서 내 부품은 구별되게). 부품 종류 색 6개 어디에도 없는 분홍으로,
+-- 조립 화면·장착판·'내 부품' 패널이 같이 씀
+local MINE_COLOR = Color3.fromRGB(255, 72, 196)
+local TAKEN_FADE = 0.4 -- 남이 꽂은 칸은 이만큼 흐리게 (내 칸이 더 눈에 띄게)
+BuildUi.Stars = STARS
+BuildUi.MineColor = MINE_COLOR
+BuildUi.TakenFade = TAKEN_FADE
 local CELL_CLOSED = Color3.fromRGB(20, 24, 36)
 local CELL_OPEN = Color3.fromRGB(32, 38, 56)
 local INK = Color3.fromRGB(18, 22, 32) -- 꽂힌 칸(밝은 색) 위의 글자
@@ -112,6 +120,25 @@ local function gridNumber(name: string, default: number): number
 	return if type(value) == "number" then value else default
 end
 
+-- 그 좌석 승무원의 그 종류 부품 레어도·레벨 ('각자 부품'이면 사람마다 다름. 없으면 이번 판 장비)
+local function partOf(typeId: string, seat: number): (number, number)
+	local folder = bound
+	local typeFolder = folder and folder:FindFirstChild(typeId)
+	local rarity = typeFolder and typeFolder:GetAttribute("Ra" .. tostring(seat))
+	local level = typeFolder and typeFolder:GetAttribute("Lv" .. tostring(seat))
+	return if type(rarity) == "number" then rarity else gridNumber("Rarity", 1),
+		if type(level) == "number" then level else gridNumber("Level", 1)
+end
+
+-- 칸에 쓰는 레벨 (만렙은 MAX)
+local function levelText(level: number): string
+	if level >= Config.Progress.MaxLevel then
+		return "MAX"
+	end
+	return "Lv" .. tostring(math.floor(level))
+end
+BuildUi.levelText = levelText
+
 local function setOpen(value: boolean)
 	if open ~= value then
 		open = value
@@ -159,16 +186,18 @@ local function paint(cell: Cell, look: string, value: number, typeId: string)
 		stroke.Transparency = 0
 		mainText = "…"
 	else
-		-- 꽂힌 칸: 종류 색, 레벨과 레어도(별), 꽂은 사람. 내 칸은 흰 테두리와 '나'
+		-- 꽂힌 칸: 종류 색, 그 사람 부품의 레벨과 레어도(별), 꽂은 사람.
+		-- 내 칸은 분홍 굵은 테두리와 분홍 '나' 딱지, 남의 칸은 조금 흐리게
 		local mine = look == "mine"
+		local rarity, level = partOf(typeId, value)
 		button.BackgroundColor3 = color
-		button.BackgroundTransparency = 0
+		button.BackgroundTransparency = if mine then 0 else TAKEN_FADE
 		stroke.Enabled = mine
-		stroke.Color = C.White
-		stroke.Thickness = 3
+		stroke.Color = MINE_COLOR
+		stroke.Thickness = 4
 		stroke.Transparency = 0
-		mainText = "Lv" .. tostring(gridNumber("Level", 1))
-		subText = STARS[math.clamp(gridNumber("Rarity", 1), 1, #STARS)]
+		mainText = levelText(level)
+		subText = STARS[math.clamp(math.floor(rarity), 1, #STARS)]
 		whoText = if mine then "나" else nameOf(value)
 		if before == "open" or before == "pending" then
 			-- 장착 연출: 꽂히는 순간 잠깐 밝게
@@ -184,7 +213,11 @@ local function paint(cell: Cell, look: string, value: number, typeId: string)
 		sub.Text = subText
 	end
 	if who then
+		local badge = look == "mine"
 		who.Text = whoText
+		who.TextColor3 = if badge then C.White else INK
+		who.BackgroundColor3 = MINE_COLOR
+		who.BackgroundTransparency = if badge then 0 else 1
 	end
 end
 
@@ -211,12 +244,15 @@ local function makeCell(parent: Instance, typeId: string, index: number, size: n
 	local cell: Cell = { button = button, stroke = stroke, main = nil, sub = nil, who = nil, look = "", value = -1 }
 	if mode ~= "small" then
 		local big = mode == "big"
-		cell.main = Ui.label(button, "Main", "", if big then (if size <= 3 then 24 else 19) else 15, {
-			Position = UDim2.fromScale(0, if big then 0.06 else 0.1),
-			Size = UDim2.fromScale(1, if big then 0.42 else 0.5),
+		local mainSize = if big then (if size <= 3 then 24 else 19) else 15
+		cell.main = Ui.label(button, "Main", "", mainSize, {
+			Position = UDim2.new(0, 2, if big then 0.06 else 0.1, 0),
+			Size = UDim2.new(1, -4, if big then 0.42 else 0.5, 0),
 			TextColor3 = INK,
 			TextStrokeTransparency = 1,
+			TextScaled = true, -- "Lv9999" 처럼 길어지면 칸 안에 들게 줄임
 		})
+		Ui.make("UITextSizeConstraint", { MaxTextSize = mainSize, Parent = cell.main })
 		cell.sub = Ui.label(button, "Sub", "", if big then 12 else 10, {
 			Position = UDim2.fromScale(0, if big then 0.46 else 0.6),
 			Size = UDim2.fromScale(1, if big then 0.22 else 0.3),
@@ -232,6 +268,7 @@ local function makeCell(parent: Instance, typeId: string, index: number, size: n
 				TextStrokeTransparency = 1,
 				TextTruncate = Enum.TextTruncate.AtEnd,
 			})
+			Ui.corner(cell.who, 4)
 		end
 	end
 	return cell

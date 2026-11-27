@@ -2,7 +2,12 @@
 -- 발사 행성 종류. 판이 새로 시작할 때마다 서버가 지난 판과 다른 행성을 하나 골라
 -- RoundState 의 Planet(행성 Id)·PlanetSeed(배치 씨앗) 속성으로 알립니다.
 -- 클라이언트 Planet.luau 가 이 값으로 둥근 행성과 주변 지형지물을 만들고, Backdrop 이 Sky 를 1단계 하늘로 씁니다.
+-- 빛 색·색감·떠다니는 입자 같은 분위기는 PlanetMoods.luau (같은 Id).
 -- 행성을 하나 더 넣으려면 아래 목록에 항목을 하나 더 쓰면 됩니다. (지형지물·소품 종류는 Planet.luau 의 BUILDERS 이름)
+-- 다음 판 행성은 정산 때 슬롯(PlanetSlot.luau)으로 뽑습니다: 지금 행성을 뺀 나머지에서 Weight(가중치) 비율대로.
+-- 가중치는 임시 값입니다 (6종 합 100: 정글·사막·바다 22, 얼음 16, 용암 12, 수정 6 = 희귀).
+-- 슬롯 칸의 그림은 Thumb (Roblox 이미지 에셋, 원본은 저장소 docs/planets/ 를 2026-11-27 Studio 에셋 관리자로 올림).
+-- 비어 있으면 행성 색으로 그린 둥근 그림을 씁니다. 그림을 바꾸려면 새로 올린 이미지 ID 로 바꿉니다.
 
 local Planets = {}
 
@@ -42,6 +47,8 @@ export type Planet = {
 	Props: { Prop }, -- 발사대 근처 소품
 	Bodies: { Body }, -- 하늘의 천체
 	Sky: Sky,
+	Weight: number, -- 다음 행성 뽑기 가중치 (클수록 잘 나옴)
+	Thumb: string, -- 슬롯 썸네일 이미지 ("rbxassetid://숫자", 아직 없으면 "")
 }
 
 local function rgb(r: number, g: number, b: number): Color3
@@ -52,6 +59,8 @@ local LIST: { Planet } = {
 	{
 		Id = "lava",
 		Name = "용암 행성",
+		Weight = 12,
+		Thumb = "rbxassetid://100473538463658",
 		Ground = { rgb(56, 42, 40), rgb(72, 50, 44), rgb(90, 60, 50) },
 		GroundMaterial = Enum.Material.Basalt,
 		Sea = rgb(255, 110, 30),
@@ -74,14 +83,16 @@ local LIST: { Planet } = {
 			{ Kind = "moon", Az = 215, El = 24, Size = 4, Colors = { rgb(120, 80, 76) } },
 		},
 		Sky = {
-			ClockTime = 18.3, Brightness = 1.3, Ambient = rgb(120, 72, 60), Outdoor = rgb(140, 84, 64),
-			Density = 0.24, Haze = 2.2, Color = rgb(255, 130, 80), Decay = rgb(120, 40, 24),
-			Streak = rgb(255, 215, 170), Clouds = 0.35,
+			ClockTime = 17.9, Brightness = 1.4, Ambient = rgb(57, 32, 24), Outdoor = rgb(150, 84, 64),
+			Density = 0.32, Haze = 2.6, Color = rgb(225, 105, 60), Decay = rgb(95, 28, 20),
+			Streak = rgb(255, 170, 90), Clouds = 0.45,
 		},
 	},
 	{
 		Id = "ice",
 		Name = "얼음 행성",
+		Weight = 16,
+		Thumb = "rbxassetid://95802390756492",
 		Ground = { rgb(198, 218, 234), rgb(220, 234, 246), rgb(238, 246, 255) },
 		GroundMaterial = Enum.Material.Snow,
 		Sea = rgb(120, 188, 236),
@@ -104,14 +115,16 @@ local LIST: { Planet } = {
 			{ Kind = "aurora", Az = 205, El = 30, Size = 30, Colors = { rgb(90, 255, 190), rgb(120, 170, 255) } },
 		},
 		Sky = {
-			ClockTime = 16.2, Brightness = 2.0, Ambient = rgb(120, 138, 165), Outdoor = rgb(150, 172, 205),
-			Density = 0.18, Haze = 1.2, Color = rgb(185, 225, 255), Decay = rgb(90, 140, 200),
-			Streak = rgb(230, 245, 255), Clouds = 0.3,
+			ClockTime = 18.9, Brightness = 1.6, Ambient = rgb(50, 60, 80), Outdoor = rgb(132, 158, 210),
+			Density = 0.22, Haze = 0.9, Color = rgb(150, 190, 240), Decay = rgb(60, 90, 160),
+			Streak = rgb(200, 240, 255), Clouds = 0.25,
 		},
 	},
 	{
 		Id = "jungle",
 		Name = "정글 행성",
+		Weight = 22,
+		Thumb = "rbxassetid://86682571491701",
 		Ground = { rgb(58, 128, 60), rgb(76, 148, 66), rgb(96, 166, 72) },
 		GroundMaterial = Enum.Material.Grass,
 		Sea = rgb(48, 140, 200),
@@ -137,14 +150,16 @@ local LIST: { Planet } = {
 			{ Kind = "moon", Az = 215, El = 28, Size = 4, Colors = { rgb(255, 230, 170) } },
 		},
 		Sky = {
-			ClockTime = 14.5, Brightness = 2.3, Ambient = rgb(100, 125, 105), Outdoor = rgb(120, 155, 125),
-			Density = 0.2, Haze = 1.5, Color = rgb(150, 230, 195), Decay = rgb(60, 140, 120),
-			Streak = rgb(220, 255, 230), Clouds = 0.5,
+			ClockTime = 16.8, Brightness = 2.2, Ambient = rgb(53, 62, 43), Outdoor = rgb(140, 164, 114),
+			Density = 0.34, Haze = 2.2, Color = rgb(175, 220, 150), Decay = rgb(70, 120, 70),
+			Streak = rgb(215, 255, 170), Clouds = 0.55,
 		},
 	},
 	{
 		Id = "desert",
 		Name = "사막 행성",
+		Weight = 22,
+		Thumb = "rbxassetid://86941930031751",
 		Ground = { rgb(212, 158, 98), rgb(226, 178, 112), rgb(236, 196, 128) },
 		GroundMaterial = Enum.Material.Sand,
 		Sea = rgb(238, 224, 198),
@@ -168,14 +183,16 @@ local LIST: { Planet } = {
 			{ Kind = "moon", Az = 230, El = 22, Size = 3, Colors = { rgb(245, 240, 230) } },
 		},
 		Sky = {
-			ClockTime = 16.8, Brightness = 2.5, Ambient = rgb(145, 118, 92), Outdoor = rgb(175, 138, 102),
-			Density = 0.22, Haze = 2.0, Color = rgb(255, 205, 140), Decay = rgb(170, 100, 60),
-			Streak = rgb(255, 235, 195), Clouds = 0.1,
+			ClockTime = 13.8, Brightness = 3.0, Ambient = rgb(71, 58, 43), Outdoor = rgb(186, 152, 114),
+			Density = 0.26, Haze = 2.6, Color = rgb(240, 200, 150), Decay = rgb(200, 130, 80),
+			Streak = rgb(255, 225, 170), Clouds = 0.05,
 		},
 	},
 	{
 		Id = "crystal",
 		Name = "수정 행성",
+		Weight = 6,
+		Thumb = "rbxassetid://135627654982822",
 		Ground = { rgb(68, 48, 98), rgb(86, 60, 118), rgb(104, 74, 138) },
 		GroundMaterial = Enum.Material.Slate,
 		Sea = rgb(128, 88, 208),
@@ -198,14 +215,16 @@ local LIST: { Planet } = {
 			{ Kind = "ringed", Az = 205, El = 26, Size = 6, Colors = { rgb(170, 120, 255), rgb(255, 170, 240) } },
 		},
 		Sky = {
-			ClockTime = 20.8, Brightness = 1.1, Ambient = rgb(115, 85, 150), Outdoor = rgb(105, 78, 148),
-			Density = 0.16, Haze = 1.0, Color = rgb(185, 120, 255), Decay = rgb(70, 35, 130),
-			Streak = rgb(240, 205, 255), Clouds = 0,
+			ClockTime = 20.8, Brightness = 1.1, Ambient = rgb(43, 33, 62), Outdoor = rgb(114, 86, 164),
+			Density = 0.18, Haze = 1.0, Color = rgb(175, 110, 255), Decay = rgb(60, 30, 120),
+			Streak = rgb(255, 190, 250), Clouds = 0,
 		},
 	},
 	{
 		Id = "ocean",
 		Name = "바다 행성",
+		Weight = 22,
+		Thumb = "rbxassetid://103029627584064",
 		Ground = { rgb(226, 210, 150), rgb(120, 180, 90), rgb(92, 150, 72) },
 		GroundMaterial = Enum.Material.Grass,
 		Sea = rgb(40, 130, 210),
@@ -229,9 +248,9 @@ local LIST: { Planet } = {
 			{ Kind = "puffs", Az = 200, El = 14, Size = 22, Colors = { rgb(255, 255, 255) } },
 		},
 		Sky = {
-			ClockTime = 13.5, Brightness = 2.6, Ambient = rgb(110, 132, 152), Outdoor = rgb(132, 162, 192),
-			Density = 0.18, Haze = 1.3, Color = rgb(140, 200, 255), Decay = rgb(70, 125, 205),
-			Streak = rgb(230, 245, 255), Clouds = 0.7,
+			ClockTime = 14.6, Brightness = 2.8, Ambient = rgb(56, 68, 80), Outdoor = rgb(148, 180, 210),
+			Density = 0.14, Haze = 0.8, Color = rgb(150, 205, 255), Decay = rgb(60, 120, 210),
+			Streak = rgb(225, 250, 255), Clouds = 0.7,
 		},
 	},
 }
@@ -261,18 +280,41 @@ function Planets.has(id: string): boolean
 	return false
 end
 
--- 다음 판 행성: 지금 행성(currentId)과 다른 것 가운데 무작위
-function Planets.pick(currentId: string, rng: Random): Planet
+export type Odds = { Planet: Planet, Chance: number }
+
+-- 다음 판 행성 후보와 확률 (0~1): 지금 행성(currentId)을 뺀 나머지, 목록 순서. 확률 = 가중치 / 후보 가중치 합.
+-- 슬롯 화면의 확률 표기와 서버의 뽑기가 같은 표를 씁니다.
+function Planets.odds(currentId: string): { Odds }
 	local choices: { Planet } = {}
+	local total = 0
 	for _, planet in ipairs(LIST) do
-		if planet.Id ~= currentId then
+		if planet.Id ~= currentId and planet.Weight > 0 then
 			table.insert(choices, planet)
+			total += planet.Weight
 		end
 	end
-	if #choices == 0 then
+	local out: { Odds } = {}
+	for _, planet in ipairs(choices) do
+		table.insert(out, { Planet = planet, Chance = planet.Weight / total })
+	end
+	return out
+end
+
+-- 다음 판 행성: 지금 행성(currentId)과 다른 것 가운데 가중치 비율대로 하나
+function Planets.pick(currentId: string, rng: Random): Planet
+	local odds = Planets.odds(currentId)
+	if #odds == 0 then
 		return LIST[1]
 	end
-	return choices[rng:NextInteger(1, #choices)]
+	local roll = rng:NextNumber()
+	local sum = 0
+	for _, entry in ipairs(odds) do
+		sum += entry.Chance
+		if roll < sum then
+			return entry.Planet
+		end
+	end
+	return odds[#odds].Planet
 end
 
 -- 목록 순서대로 다음 행성 (디버그 패널에서 하나씩 넘겨 볼 때)

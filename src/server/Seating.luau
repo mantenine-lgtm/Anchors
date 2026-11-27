@@ -1,20 +1,22 @@
--- 캐릭터를 좌석에 고정합니다.
--- 기본 Seat 는 점프하면 내려지므로 쓰지 않고, 캐릭터 중심을 좌석 위치에 고정(Anchored)합니다.
--- 그래서 점프 입력을 미션 버튼으로 써도 내려지지 않습니다.
+-- 판 동안 캐릭터를 선실에 둡니다.
+--  · 승무원: 판이 시작하면 선실 바닥의 탑승 자리로 옮기고, 그 뒤로는 선실 안을 자유롭게 걸어다닙니다(의자 없음).
+--    선실 밖으로 나가면(엔진이 새 캐릭터를 뒤늦게 리스폰 지점으로 옮긴 경우 등) 탑승 자리로 되돌립니다.
+--  · 관전자(유령): 천장 가까이 정해진 자리에 고정(Anchored)하고 반투명하게. 둘러보기만 합니다.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 
-local Config = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"))
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Cabin = require(Shared:WaitForChild("Cabin"))
+local Config = require(Shared:WaitForChild("Config"))
 local World = require(script.Parent.World)
 
 local Seating = {}
 
-local R15_SIT = "rbxassetid://2506281703"
-local R6_SIT = "rbxassetid://178130996"
 local GOLD = Color3.fromRGB(255, 205, 60)
-local GUARD_INTERVAL = 0.5 -- 자리에 고정한 캐릭터가 제자리에 있는지 다시 보는 간격(초)
+local GUARD_INTERVAL = 0.5 -- 승무원이 선실 안에 있는지, 관전자가 제자리에 있는지 다시 보는 간격(초)
+local CABIN_MARGIN = 2 -- 캐릭터 중심이 선실 벽·바닥에서 이보다 더 벗어나면 선실 밖으로 봄
 local GHOST_REFRESH = 6 -- 유령의 투명 처리를 되풀이하는 횟수 (늦게 붙는 장신구 대비, 약 3초 동안)
 local LOAD_STUCK = 60 -- 캐릭터가 생긴 뒤 이만큼(초) 지나도 Workspace 에 나타나지 않으면 불러오기가 멈춘 것으로 봄
 
@@ -42,7 +44,7 @@ local function getParts(character: Model): (BasePart?, Humanoid?)
 	return nil, nil
 end
 
--- 캐릭터를 cframe 에 고정
+-- 캐릭터를 cframe 에 고정 (관전자)
 local function hold(character: Model, cframe: CFrame): Humanoid?
 	local rootPart, humanoid = getParts(character)
 	if not rootPart or not humanoid then
@@ -57,32 +59,19 @@ local function hold(character: Model, cframe: CFrame): Humanoid?
 	return humanoid
 end
 
-local function playSit(character: Model, humanoid: Humanoid)
-	local animator = humanoid:FindFirstChildOfClass("Animator")
-	if not animator then
-		animator = Instance.new("Animator")
-		animator.Parent = humanoid
+-- 캐릭터를 cframe 으로 옮기고 자유롭게 움직이게 함 (승무원)
+local function free(character: Model, cframe: CFrame): Humanoid?
+	local rootPart, humanoid = getParts(character)
+	if not rootPart or not humanoid then
+		return nil
 	end
-	local animationId = ""
-	local animate = character:FindFirstChild("Animate")
-	local sit = animate and animate:FindFirstChild("sit")
-	local sitAnimation = sit and sit:FindFirstChildOfClass("Animation")
-	if sitAnimation and sitAnimation:IsA("Animation") then
-		animationId = sitAnimation.AnimationId
-	end
-	if animationId == "" then
-		animationId = if humanoid.RigType == Enum.HumanoidRigType.R15 then R15_SIT else R6_SIT
-	end
-	local animation = Instance.new("Animation")
-	animation.AnimationId = animationId
-	local ok, track = pcall(function()
-		return (animator :: Animator):LoadAnimation(animation)
-	end)
-	if ok and track then
-		track.Priority = Enum.AnimationPriority.Action
-		track.Looped = true
-		track:Play(0.2)
-	end
+	humanoid.PlatformStand = false
+	humanoid.AutoRotate = true
+	rootPart.Anchored = false
+	rootPart.AssemblyLinearVelocity = Vector3.zero
+	rootPart.AssemblyAngularVelocity = Vector3.zero
+	character:PivotTo(cframe)
+	return humanoid
 end
 
 local function addCrown(character: Model)
@@ -132,11 +121,13 @@ local function waitUntilSpawned(player: Player, character: Model): boolean
 	return player.Character == character and character:IsDescendantOf(Workspace)
 end
 
--- 자리에 고정한 캐릭터를 그 자리가 풀릴 때(판이 끝나거나 캐릭터가 바뀔 때)까지 지켜봄.
+-- 자리를 잡은 캐릭터를 그 자리가 풀릴 때(판이 끝나거나 캐릭터가 바뀔 때)까지 지켜봄.
 -- 엔진이 새 캐릭터를 리스폰 지점으로 옮기는 때는 문서에 순서만 있고 시간은 없어서, 자리를 잡은 뒤에
--- 뒤늦게 발사장으로 옮겨질 수 있습니다. 그때나 다른 이유로 자리를 벗어나면 다시 제자리에 둡니다.
+-- 뒤늦게 발사장으로 옮겨질 수 있습니다. 그때나 다른 이유로
+--  · 승무원이 선실 밖에 있으면 탑승 자리로 되돌립니다 (선실 안에서 걸어다니는 것은 그대로 둠)
+--  · 관전자가 제자리를 벗어나면 다시 고정합니다
 -- 자리 기록은 같은 표인지로 알아봅니다: 판이 끝나 기록이 지워진 뒤 같은 캐릭터가 같은 자리 이름으로 다시
--- 잡혀도(새 판의 좌석 위치는 승무원 수에 따라 다를 수 있음) 지난 판의 반복은 멈춥니다.
+-- 잡혀도(새 판의 탑승 자리 위치는 승무원 수에 따라 다를 수 있음) 지난 판의 반복은 멈춥니다.
 local function guard(player: Player, entry: Placement, cframe: CFrame, ghost: boolean)
 	local character = entry.character
 	task.spawn(function()
@@ -149,8 +140,12 @@ local function guard(player: Player, entry: Placement, cframe: CFrame, ghost: bo
 			local rootPart = character:FindFirstChild("HumanoidRootPart")
 			local humanoid = character:FindFirstChildOfClass("Humanoid")
 			if rootPart and rootPart:IsA("BasePart") and humanoid then
-				if not rootPart.Anchored or (rootPart.Position - cframe.Position).Magnitude > 2 then
-					hold(character, cframe)
+				if ghost then
+					if not rootPart.Anchored or (rootPart.Position - cframe.Position).Magnitude > 2 then
+						hold(character, cframe)
+					end
+				elseif rootPart.Anchored or not Cabin.contains(rootPart.Position, CABIN_MARGIN) then
+					free(character, cframe)
 				end
 			end
 			checks += 1
@@ -169,17 +164,20 @@ function Seating.apply(player: Player)
 	end
 	local role = player:GetAttribute("Role")
 	if role == "Crew" then
-		local seatIndex = player:GetAttribute("Seat")
-		if typeof(seatIndex) ~= "number" or seatIndex < 1 or seatIndex > World.seatCount() then
+		-- 속성 Seat 는 이번 판의 승무원 번호 = 탑승 자리 번호 (조립 그리드·클로즈업도 이 번호로 사람을 알아봄)
+		local spotIndex = player:GetAttribute("Seat")
+		if typeof(spotIndex) ~= "number" or spotIndex < 1 or spotIndex > World.spotCount() then
 			return
 		end
-		local key = "Crew:" .. tostring(seatIndex)
-		local target = World.seatCFrame(seatIndex) * CFrame.new(0, Config.World.SeatRootOffset, 0.2)
-		local humanoid = hold(character, target)
-		if humanoid and not isPlaced(player, character, key) then
+		local key = "Crew:" .. tostring(spotIndex)
+		if isPlaced(player, character, key) then
+			return -- 이미 이 캐릭터를 태웠으면 다시 옮기지 않음 (걸어다니는 중에 탑승 자리로 끌어오지 않게)
+		end
+		local target = World.spotCFrame(spotIndex) * CFrame.new(0, Config.World.SpotHeight, 0)
+		local humanoid = free(character, target)
+		if humanoid then
 			local entry: Placement = { character = character, key = key }
 			placed[player] = entry
-			playSit(character, humanoid)
 			if player:GetAttribute("Captain") == true then
 				addCrown(character)
 			end
@@ -203,9 +201,10 @@ function Seating.apply(player: Player)
 	end
 end
 
-function Seating.seat(player: Player, seatIndex: number, isCaptain: boolean)
+-- 승무원으로 태움: spotIndex 번 탑승 자리로 옮김
+function Seating.board(player: Player, spotIndex: number, isCaptain: boolean)
 	player:SetAttribute("Role", "Crew")
-	player:SetAttribute("Seat", seatIndex)
+	player:SetAttribute("Seat", spotIndex)
 	player:SetAttribute("Captain", isCaptain)
 	task.spawn(Seating.apply, player)
 end
@@ -258,7 +257,7 @@ function Seating.releaseAll()
 	end
 end
 
--- 캐릭터가 생길 때: 판 중이면 좌석/유령 자리로, 아니면 발사장 리스폰 자리로
+-- 캐릭터가 생길 때: 판 중이면 선실(탑승 자리·유령 자리)로, 아니면 발사장 리스폰 자리로
 function Seating.onCharacterAdded(player: Player, character: Model)
 	addedAt[player] = { character = character, at = time() }
 	if not waitUntilSpawned(player, character) then

@@ -45,4 +45,10 @@ function Boosters.byAttribute(id: string): string
 	return "By_" .. id
 end
 
+-- 이 부스터로 지금까지 늘린 거리(km)를 서버가 비행 중에 알려 주는 속성 (그 부스터 하나만 안 쓴 비행과의 차이).
+-- 화면의 코인 연출이 부스터로 더 번 코인을 따로 모아 보여 주는 데 씁니다. 황금 항로는 거리를 바꾸지 않아 없음 (GoldenFromKm 을 씀)
+function Boosters.extraAttribute(id: string): string
+	return "Extra_" .. id
+end
+
 return Boosters

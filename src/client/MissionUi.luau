@@ -1,6 +1,8 @@
 -- 방향 미션: 화면에 뜬 순서대로 방향 버튼(+점프)을 누릅니다.
 -- 입력: 화면 버튼(터치·마우스), 키보드(방향키·WASD·스페이스), 게임패드(십자키·A).
 -- 결과는 팀 전체 성공률만 보여 주고, 내 결과는 나에게만 보입니다.
+-- 승무원은 선실을 걸어다니다가, 미션이 뜨면 입력을 끝낼 때까지(또는 시간이 끝날 때까지) 그 자리에 멈춥니다
+-- (State.missionInput → CameraRig 가 걷기·점프를 잠금). 터치 기기는 그동안만 이동 스틱 대신 미션 버튼이 뜹니다.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
@@ -143,6 +145,7 @@ local function press(key: string)
 		if m.index > #m.sequence then
 			m.finished = true
 			m.success = true
+			State.missionInput = false -- 다 눌렀으면 바로 다시 걸을 수 있게
 			Net.event("MissionInput"):FireServer(m.id, "done", m.sequence)
 			titleLabel.Text = "입력 완료! 판정을 기다립니다"
 			titleLabel.TextColor3 = C.Green
@@ -182,6 +185,7 @@ local function onMissionStart(info: any)
 		success = false,
 		slots = buildSlots(sequence),
 	}
+	State.missionInput = true
 	titleLabel.Text = promptText()
 	titleLabel.TextColor3 = C.Yellow
 	slotRow.Visible = true
@@ -342,9 +346,6 @@ end
 function MissionUi.update(_dt: number)
 	local flying = State.phase() == "Flight"
 	local crew = State.role() == "Crew"
-	local showPad = flying and crew and wantsPad()
-	padFrame.Visible = showPad
-	jumpButton.Visible = showPad
 
 	local m = mission
 	if m then
@@ -361,6 +362,13 @@ function MissionUi.update(_dt: number)
 		panel.Visible = false
 		mission = nil
 	end
+
+	-- 내 입력을 받는 동안만 걷기를 잠그고(CameraRig) 화면 버튼을 보여 줌
+	local active = mission ~= nil and not (mission :: Mission).finished and flying and crew
+	State.missionInput = active
+	local showPad = active and wantsPad()
+	padFrame.Visible = showPad
+	jumpButton.Visible = showPad
 end
 
 return MissionUi

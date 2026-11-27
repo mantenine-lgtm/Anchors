@@ -17,8 +17,18 @@ Config.Phase = {
 	Build = 45, -- 부품 조립 (기획서 본문 값)
 	BuildAllPlaced = 5, -- 임시: 탄 사람이 모두 부품을 다 꽂으면 이만큼만 더 기다림 (혼자 테스트할 때 45초를 다 기다리지 않게)
 	Countdown = 10,
-	Results = 20,
+	Results = 25, -- 정산 화면 + 다음 행성 슬롯 (임시: 슬롯을 넣으며 20초에서 늘림)
 	FlightMax = 600, -- 안전장치: 이보다 길어지면 비행을 끝냄
+}
+
+-- 다음 행성 슬롯 (정산 페이즈 안에서, 임시 값): 정산 화면을 StartAfter 초 보여 준 뒤 슬롯이 Spin 초 돌고 멈춤.
+-- 멈춘 뒤 정산이 끝날 때까지(25 - 15 - 5 = 5초) 뽑힌 행성을 보여 주고, 판이 끝나면 그 행성으로 바뀝니다.
+Config.PlanetSlot = {
+	StartAfter = 15,
+	Spin = 5,
+	Intro = 0.6, -- 돌기 전에 슬롯 판이 먼저 나와 있는 시간
+	Cycles = 3, -- 멈추기 전에 후보를 몇 바퀴 돌리는지
+	RarePercent = 10, -- 확률이 이 % 이하면 '희귀'로 표시
 }
 
 -- 비행 계산 (FlightSim.luau 가 사용)
@@ -157,7 +167,7 @@ Config.Parts = {
 	},
 	RarityNames = { "일반", "희귀", "영웅", "전설" },
 	RarityPower = { 10, 100, 1000, 10000 },
-	LevelMultiplier = { 1.0, 1.3, 1.7, 2.2, 2.8, 3.6, 4.6, 6.0, 7.7, 10.0 },
+	-- 레벨 배율은 Parts.levelMultiplier (Config.Progress 아래 설명)
 	SlotBonus = 0.01, -- 꽂은 부품 1개당 그 종류 합계 +1%
 	RankExp = 1, -- 종류별 합계에서 센 순서 k번째 부품은 1 / k^RankExp 만 더함 (인원 효과를 완만하게)
 }
@@ -175,15 +185,34 @@ Config.Build = {
 	AnnounceRarity = 3, -- 사람이 이 레어도(3 = 영웅) 이상 부품을 처음 꽂으면 전원에게 알림 (기획서 '장착 연출')
 }
 
--- 장비 묶음 (데모 1은 전원 같은 장비. 디버그 패널에서 바꿈)
+-- 장비 묶음 (디버그 패널에서 바꿈). 기본 "각자 부품": 사람은 자기 부품 6개(레어도·레벨, PartProgress)를 꽂고 봇은 일반 Lv1.
+-- 나머지 묶음은 시험용으로 사람·봇 모두 같은 장비. 옛 Lv k(1~10 표)는 Lv 1+1111(k−1) 과 파워가 거의 같음 (Lv5 → 4,445)
 Config.Gear = {
-	Default = "common1",
+	Default = "own",
 	Presets = {
+		{ Id = "own", Name = "각자 부품", Rarity = 1, Level = 1, Own = true }, -- Rarity·Level 은 봇 장비
 		{ Id = "common1", Name = "일반 Lv1", Rarity = 1, Level = 1 },
-		{ Id = "rare5", Name = "희귀 Lv5", Rarity = 2, Level = 5 },
-		{ Id = "epic5", Name = "영웅 Lv5", Rarity = 3, Level = 5 },
-		{ Id = "legend10", Name = "전설 Lv10", Rarity = 4, Level = 10 },
+		{ Id = "rare5", Name = "희귀 Lv4,445", Rarity = 2, Level = 4445 },
+		{ Id = "epic5", Name = "영웅 Lv4,445", Rarity = 3, Level = 4445 },
+		{ Id = "legend10", Name = "전설 Lv10,000", Rarity = 4, Level = 10000 },
 	},
+}
+
+-- 부품 레벨·경험치 (Nick 11-27: 만렙 약 10000, 비행 중 경험치 바가 쭉쭉 차고 레벨업마다 폭죽. 만렙까지 약 2000판, 초반엔 잘
+-- 오르다가 갈수록 힘들게). 수치는 밸런스 스레드(11-27). 사람마다 부품 6종(종류별 1개)이 각자 레어도·레벨·경험치를 가짐.
+-- 시작은 6종 모두 일반 Lv1, 서버가 켜져 있는 동안만 기억.
+-- 다음 레벨까지 경험치 = 내림(ExpRarityFactor[레어도] × (지금 레벨 + ExpLevelOffset)² / ExpDivisor).
+-- 새 일반 부품은 첫 판에 Lv700 안팎, 만렙까지 일반 약 500판·전설 약 2,000판.
+-- 파워 = 레어도 기본값 × 레벨 배율 10^((레벨−1)/(만렙−1)): Lv1 ×1, Lv1,000 ×1.26, Lv5,000 ×3.16, Lv10,000 ×10 (Parts.power).
+-- 비행 중 오른 레벨은 다음 판 조립부터 파워에 들어감 (판 도중에는 그대로).
+Config.Progress = {
+	MaxLevel = 10000,
+	ExpRarityFactor = { 1, 2, 3, 4 }, -- 일반·희귀·영웅·전설
+	ExpLevelOffset = 500,
+	ExpDivisor = 500,
+	ExpPerSecond = 10000, -- 발사부터 비행이 끝날 때까지 1초마다 탄 사람(봇·관전자 제외)의 부품 하나가 얻는 경험치. 데모 2는 2배
+	SendInterval = 0.25, -- 비행 중 경험치를 주고 그 사람 화면에 알리는 간격(초). 레벨업 폭죽도 이 간격으로 묶어서 터짐
+	DebugLevels = 1000, -- 디버그 패널의 "내 부품 레벨 +" 버튼 한 번에 오르는 레벨 (열 번이면 만렙, 폭죽도 터짐)
 }
 
 -- 보상 (임시)
@@ -193,6 +222,25 @@ Config.Rewards = {
 	AwardTickets = 1, -- 시상 1개당 티켓
 	StartTickets = 3, -- 임시: 서버에 들어올 때 받는 티켓 (첫 판부터 부스터를 눌러 볼 수 있게)
 	ExpectedRate = 0.85, -- 빌드 페이즈 예상 거리에 쓰는 미션 성공률
+}
+
+-- 비행 중 코인 연출 (CoinFx.luau). 거리만큼 쌓이는 이번 비행 코인이 화면 오른쪽 위 '보유 코인' 칸으로 날아 들어가고,
+-- 부스터로 더 번 코인은 부스터 색으로 모았다가 화면 가운데에서 한꺼번에 터져 나와 들어갑니다.
+-- 한 번에 들어오는 코인이 많을수록 코인 수·크기·퍼지는 폭·글자·반짝임·소리가 커집니다. 크기는 이번 판 예상 코인
+-- (조립 때 계산한 예상 거리 × CoinsPerKm)에 대한 비율로 정해서, 장비가 좋아져도 같은 양이면 같은 느낌입니다.
+Config.CoinFx = {
+	DistanceInterval = 0.3, -- 거리 코인은 이만큼(초)마다 모아서 날림
+	BoostGather = 1.2, -- 부스터 코인은 첫 코인부터 이만큼(초) 모았다가 한꺼번에 날림 (웜홀처럼 한 번에 생긴 코인은 한 무더기로)
+	SmallRatio = 0.004, -- 한 번에 들어오는 코인이 예상 코인의 이 비율 이하면 가장 작은 효과 (코인 1개)
+	HugeRatio = 0.25, -- 이 비율 이상이면 가장 화려한 효과
+	MinExpected = 50, -- 예상 코인이 이보다 작거나 아직 모르면 이 값으로 봄
+	MaxSprites = 80, -- 화면에 한꺼번에 날아다니는 코인 수 한도
+	MaxPerBurst = 30, -- 한 무더기에 날리는 코인 수 한도 (가장 화려할 때)
+	DistanceMaxSprites = 4, -- 거리 코인 한 번에 날리는 코인 수 한도 (작은 효과로 유지)
+	-- 임시 소리: Roblox 내장 소리 중 짧은 '팅' 소리를 빠르게 재생해 코인 소리로 씀. 나중에 크리에이터 스토어 소리로 교체
+	SoundId = "rbxasset://sounds/volume_slider.ogg",
+	SoundVolume = 0.3, -- 가장 작은 효과일 때. 클수록 0.3 더 커짐
+	SoundGap = 0.045, -- 코인 소리 사이의 최소 간격(초). 많이 들어올 때 소리가 뭉개지지 않게
 }
 
 -- 루트: 챕터와 스테이지 끝 지점(km). 이름은 데모 스테이지 5개만 확정.
@@ -234,33 +282,38 @@ Config.Atmosphere = {
 }
 
 -- 회색 상자 월드 치수(스터드). 로켓은 원점에 서 있고 배경이 움직입니다.
+-- 선실은 승무원이 걸어다니는 둥근 방이고 4면으로 나뉩니다 (Cabin.luau):
+-- +Z·-Z 는 외창, +X 는 진행도 전광판(Board), -X 는 부품 장착판(PartsBoard)과 그 아래 내 부품 판(MyPartsBoard).
+-- 전광판들은 둥근 벽 앞에 세운 평평한 벽에 붙음.
 Config.World = {
 	GroundSize = 2048,
 	MountRadius = 46,
 	MountHeight = 4,
 	RocketBaseY = 12, -- 선체 바닥
 	RocketTopY = 212, -- 선체 꼭대기(코 제외)
-	HullRadius = 26,
-	CabinRadius = 24,
+	HullRadius = 38,
+	CabinRadius = 36, -- 선실 바닥 반지름 (100명이 서도 한 사람에 약 40 제곱스터드)
 	CabinFloorY = 120,
 	CabinCeilY = 160,
-	WallSegments = 36,
-	WindowHalfAngle = 50, -- 외창이 차지하는 각도의 절반(도)
-	WindowBottomY = 123,
-	WindowTopY = 146,
-	BoardWidth = 34, -- 전광판은 외창 위 벽에서 조금 앞으로 나와 매달려 있음 (둥근 벽에 모서리가 묻히지 않게)
-	BoardHeight = 11,
-	BoardY = 150.5,
-	BoardZ = 13,
-	SeatRadius = 19,
-	SeatSpacing = 5.5,
-	SeatFirstRowY = 125,
-	SeatRowHeight = 7,
-	SeatsPerRowMax = 10,
-	SeatReclineDeg = 40, -- 의자가 뒤로 젖혀진 각도
-	SeatRootOffset = 1.9, -- 의자 판에서 캐릭터 중심까지 높이
+	WallSegments = 48,
+	WindowHalfAngle = 40, -- 외창 하나(+Z, -Z 두 곳)가 차지하는 각도의 절반(도)
+	WindowBottomY = 121, -- 외창 아래 끝 (바닥 위 1 스터드). 낮게 두어 선실 어디에서 보든 창 너머 행성이 보임 (Planet.placement)
+	WindowTopY = 154,
+	PanelWallX = 28, -- 전광판을 붙이는 평평한 벽: 선실 가운데에서 ±X 로 이 거리 (벽 너비 약 45)
+	BoardWidth = 40, -- 진행도 전광판 (+X 벽)
+	BoardHeight = 20,
+	BoardY = 140, -- 전광판 가운데 높이 (바닥에서 20)
+	PartsBoardWidth = 40, -- 부품 장착판 (-X 벽 위쪽)
+	PartsBoardHeight = 20,
+	PartsBoardY = 147,
+	MyPartsBoardWidth = 40, -- 내 부품 판 (-X 벽, 부품 장착판 바로 아래). 화면은 사람마다 자기 부품을 그림
+	MyPartsBoardHeight = 9,
+	MyPartsBoardY = 130.5,
+	SpotRadius = 26, -- 탑승 자리(승무원이 처음 서는 곳)를 퍼뜨리는 반지름
+	SpotHeight = 3.5, -- 탑승 자리 바닥에서 캐릭터 중심까지 (조금 떠서 내려앉음)
+	CabinMaxZoom = 30, -- 선실 안에서 카메라가 내 캐릭터에서 멀어질 수 있는 최대 거리
 	SpawnDistance = 95, -- 로켓 중심에서 리스폰 지점까지
-	OutsideCamera = { 130, 90, 205 }, -- 바깥 시점 카메라 자리 (x, y, z)
+	OutsideCamera = { 241, 60, 380, 36 }, -- 바깥 시점 카메라 자리 (x, y, z)와 바라보는 로켓 축의 높이. 로켓과 그 아래 추진운이 함께 보이게 조금 멀리서
 	StudsPerMeter = 3.57,
 }
 

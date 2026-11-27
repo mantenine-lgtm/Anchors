@@ -88,10 +88,12 @@ function Route.progress(km: number): (number, number, number)
 	return index, fraction, math.max(endKm - km, 0)
 end
 
--- 전광판 궤적 표시용: 0~1 (로그 눈금이라 초반 스테이지도 보임)
+-- 전광판 추격 화면의 가로 위치: 0 (출발) ~ 1 (루트 끝). 로그 눈금이라 초반 스테이지도 보임.
+-- LOG_REF_KM(50 m)보다 짧은 거리는 거의 고른 눈금이라, 발사 직후부터 로켓이 움직여 보입니다.
+local LOG_REF_KM = 0.05
 function Route.logPosition(km: number): number
-	local total = math.log10(1 + Config.Flight.RouteEnd)
-	return math.clamp(math.log10(1 + math.max(km, 0)) / total, 0, 1)
+	local total = math.log10(1 + Config.Flight.RouteEnd / LOG_REF_KM)
+	return math.clamp(math.log10(1 + math.max(km, 0) / LOG_REF_KM) / total, 0, 1)
 end
 
 return Route

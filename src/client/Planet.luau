@@ -7,10 +7,12 @@
 --    모서리를 따라 붕괴 균열이 빛납니다.
 --  · 지형지물: 멀리서도 보이는 큰 것(화산·산·메사·수정 첨탑 등)과 발사대 근처 소품(나무·바위·수정 등).
 --  · 하늘: 행성마다 다른 천체(붉은 해, 달, 고리 행성, 성운, 오로라, 구름). 하늘빛은 Planets.luau 의 Sky 를 Backdrop 이 씀.
+--  · 분위기: 떠다니는 입자·빛나는 소품의 불빛·발사장 불빛 색은 PlanetMood.luau 가 행성을 만들 때 더함 (빛·색감도 그 모듈).
 --  · 비행: 로켓은 원점에 그대로 있고 행성 쪽을 움직입니다. 처음 몇 초는 실제처럼 아래로 내려가고,
 --    그 뒤로는 '보이는 고도'가 거리(km)의 0.38제곱으로 느리게 늘어 행성이 점점 작아지는 공이 됩니다.
 --    카메라는 옆을 보고 있으므로 행성을 시선 아래쪽으로 돌려 놓아 화면에 계속 보이게 합니다
---    (선실 창: 지평선이 창 아래쪽에 걸림. 바깥 시점: 로켓 뒤 아래쪽, 작아지면 옆으로 비킴).
+--    (선실: 선실 어디에 서 있든 +Z 외창 너머, 지평선이 창 아래쪽에 걸림. 바깥 시점: 로켓 뒤 아래쪽, 작아지면 옆으로 비킴).
+--    발사 전과 발사 직후에는 실제 자리(발사대 아래)에 있다가 보이는 고도가 오르면서 그 자리로 옮겨 갑니다.
 --    너무 멀면 크기를 줄여 그만큼 가깝게 둡니다(카메라에서 보이는 모습은 같음).
 -- 전부 내 화면에서만 만들고 움직이는 것이라 다른 사람에게 영향이 없습니다.
 
@@ -21,7 +23,10 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared:WaitForChild("Config"))
 local Planets = require(Shared:WaitForChild("Planets"))
 
+local PlanetMood = require(script.Parent:WaitForChild("PlanetMood"))
 local State = require(script.Parent:WaitForChild("State"))
+-- 지형지물·소품의 모양 (GPT 가 만든 모델 코드)
+local PlanetProps = require(script.Parent:WaitForChild("PlanetProps"))
 
 local Planet = {}
 
@@ -47,7 +52,7 @@ local FAR_POWER = 0.381 -- (1 km = 각반지름 약 51도, 30 km = 33도, 100 km
 local MAX_DISTANCE = 3000 -- 카메라에서 행성 중심까지 이보다 멀면 크기를 줄여 그만큼 가깝게 둠 (안개에 덜 흐려짐)
 local SCALE_STEPS = 32 -- 크기 배율은 2배마다 이만큼의 단계로만 바꿈 (크기 바꾸기는 무거워서 자주 하지 않음. 보이는 모습은 같음)
 local INSIDE_RADIUS = 120 -- 카메라가 로켓 축에서 이 거리 안이면 선실 시점으로 봄
-local OUTSIDE_RAMP = 350 -- 바깥 시점: 보이는 고도가 이만큼이 될 때까지 실제처럼 내려가다가 서서히 화면 안으로 들어옴
+local OUTSIDE_RAMP = 350 -- 보이는 고도가 이만큼이 될 때까지 실제처럼 내려가다가 서서히 화면 안으로 들어옴 (선실·바깥 시점 모두)
 local PROPS_HIDE_ALTITUDE = 900 -- 보이는 고도가 이보다 높으면 작은 소품은 숨김 (안 보일 만큼 작고, 움직일 파트를 줄임)
 local NEAR_ALTITUDE = 400 -- 이보다 낮을 때는 매 프레임 옮기고, 높으면 초당 20번만 옮김
 local SLOW_INTERVAL = 0.05
@@ -69,6 +74,8 @@ type PadPart = { part: BasePart, cframe: CFrame, size: Vector3 }
 local padParts: { PadPart } = {}
 local padScale = 1
 local padApplied = "" -- 발사 광장에 마지막으로 적용한 자리 (같으면 다시 옮기지 않음)
+local padModel: Instance? = nil
+local padTint = "" -- 발사장 불빛을 칠한 행성 (행성이 바뀌면 다시 칠함)
 local anchor: Vector3? = nil
 local lastApply = 0
 local toastPending = ""
@@ -104,11 +111,6 @@ local function newPart(parent: Instance, name: string, color: Color3, material: 
 	return part
 end
 
-local function solid(part: BasePart): BasePart
-	part.CanCollide = true
-	return part
-end
-
 local function box(parent: Instance, name: string, cframe: CFrame, size: Vector3, color: Color3, material: Enum.Material): BasePart
 	local part = newPart(parent, name, color, material)
 	part.Size = size
@@ -121,15 +123,6 @@ local function ball(parent: Instance, name: string, center: Vector3, diameter: n
 	part.Shape = Enum.PartType.Ball
 	part.Size = Vector3.new(diameter, diameter, diameter)
 	part.CFrame = CFrame.new(center)
-	return part
-end
-
--- 세로 원기둥: base 의 Y 축을 따라 0 ~ height
-local function column(parent: Instance, name: string, base: CFrame, radius: number, height: number, color: Color3, material: Enum.Material): BasePart
-	local part = newPart(parent, name, color, material) :: Part
-	part.Shape = Enum.PartType.Cylinder
-	part.Size = Vector3.new(height, radius * 2, radius * 2)
-	part.CFrame = base * CFrame.new(0, height / 2, 0) * CFrame.Angles(0, 0, math.rad(90))
 	return part
 end
 
@@ -175,307 +168,15 @@ local function surfaceFrame(point: Vector3, up: Vector3, yaw: number): CFrame
 	return CFrame.fromMatrix(point, right, up, back) * CFrame.Angles(0, yaw, 0)
 end
 
--- 각뿔(로우폴리 산·뾰족한 바위): base 는 바닥 가운데(Y 위), 꼭짓점은 apex(base 기준). 바닥은 sink 만큼 땅에 묻힘
-local function pyramid(parent: Instance, base: CFrame, radius: number, apex: Vector3, sides: number, color: Color3, material: Enum.Material, rng: Random, sink: number)
-	local corners: { Vector3 } = {}
-	local turn = rng:NextNumber(0, math.pi * 2)
-	for i = 1, sides do
-		local angle = turn + (i - 1) / sides * math.pi * 2
-		local r = radius * rng:NextNumber(0.8, 1.1)
-		corners[i] = base:PointToWorldSpace(Vector3.new(math.cos(angle) * r, -sink, math.sin(angle) * r))
-	end
-	local top = base:PointToWorldSpace(apex)
-	local inside = base:PointToWorldSpace(Vector3.new(apex.X * 0.3, apex.Y * 0.25, apex.Z * 0.3))
-	local thickness = math.min(radius * 0.25, 6)
-	for i = 1, sides do
-		triangle(parent, corners[i], corners[i % sides + 1], top, inside, thickness, shade(color, rng:NextNumber(0.9, 1.08)), material)
-	end
-end
-
--- 날 두 개를 엇갈려 세운 뾰족한 조각 (가시·얼음 조각·흑요석)
-local function shard(parent: Instance, base: CFrame, width: number, height: number, color: Color3, material: Enum.Material)
-	for turn = 0, 1 do
-		local frame = base * CFrame.Angles(0, turn * math.pi / 2, 0)
-		local half = width / 2
-		local a = newPart(parent, "Shard", color, material, "WedgePart")
-		a.Size = Vector3.new(width * 0.35, height, half)
-		a.CFrame = frame * CFrame.new(0, height / 2, -half / 2)
-		local b = newPart(parent, "Shard", color, material, "WedgePart")
-		b.Size = Vector3.new(width * 0.35, height, half)
-		b.CFrame = frame * CFrame.new(0, height / 2, half / 2) * CFrame.Angles(0, math.pi, 0)
-	end
-end
-
 -- ------------------------------------------------------------ 지형지물과 소품
--- 모두 같은 모양: (부모, 표면 좌표계, 크기 배율, 색 목록, 난수) -> 차지하는 반지름(스터드)
+-- 모두 같은 모양: (부모, 표면 좌표계, 크기 배율, 색 목록, 난수) -> 차지하는 반지름(스터드). 만드는 코드는 PlanetProps.luau
 type Builder = (Instance, CFrame, number, { Color3 }, Random) -> number
 
 local function pick(colors: { Color3 }, index: number): Color3
 	return colors[(index - 1) % #colors + 1]
 end
 
-local BUILDERS: { [string]: Builder } = {}
-
-BUILDERS.rock = function(parent, base, s, colors, rng)
-	local count = rng:NextInteger(1, 3)
-	for i = 1, count do
-		local size = Vector3.new(rng:NextNumber(8, 18), rng:NextNumber(6, 13), rng:NextNumber(8, 18)) * s
-		local offset = Vector3.new(rng:NextNumber(-7, 7) * s, size.Y * 0.25, rng:NextNumber(-7, 7) * s)
-		local tilt = CFrame.Angles(rng:NextNumber(-0.4, 0.4), rng:NextNumber(0, 6.28), rng:NextNumber(-0.4, 0.4))
-		solid(box(parent, "Rock", base * CFrame.new(offset) * tilt, size, shade(pick(colors, i), rng:NextNumber(0.9, 1.1)), Enum.Material.Slate))
-	end
-	return 18 * s
-end
-
-BUILDERS.spike = function(parent, base, s, colors, rng)
-	local count = rng:NextInteger(1, 3)
-	for i = 1, count do
-		local offset = if i == 1 then Vector3.zero else Vector3.new(rng:NextNumber(-9, 9), -1, rng:NextNumber(-9, 9)) * s
-		local tilt = CFrame.Angles(rng:NextNumber(-0.25, 0.25), rng:NextNumber(0, 6.28), rng:NextNumber(-0.25, 0.25))
-		local height = (if i == 1 then rng:NextNumber(26, 42) else rng:NextNumber(12, 24)) * s
-		shard(parent, base * CFrame.new(offset) * tilt * CFrame.new(0, -2, 0), height * 0.42, height, pick(colors, 1), Enum.Material.Glass)
-	end
-	return 14 * s
-end
-
-BUILDERS.pool = function(parent, base, s, colors, rng)
-	local radius = rng:NextNumber(14, 26) * s
-	local rim = column(parent, "PoolRim", base * CFrame.new(0, -1.2, 0), radius + 3, 1.6, Color3.fromRGB(40, 32, 32), Enum.Material.Basalt)
-	rim.CanCollide = true
-	column(parent, "Pool", base * CFrame.new(0, -0.6, 0), radius, 1.4, pick(colors, 1), Enum.Material.Neon)
-	return radius + 3
-end
-
-BUILDERS.pine = function(parent, base, s, colors, rng)
-	local trunk = Color3.fromRGB(96, 70, 56)
-	solid(column(parent, "Trunk", base * CFrame.new(0, -1, 0), 1.6 * s, 9 * s, trunk, Enum.Material.Wood))
-	local y = 6 * s
-	local tiers = { { 11, 8 }, { 8, 7 }, { 5, 7 } }
-	for i, tier in ipairs(tiers) do
-		local color = if i == #tiers then pick(colors, 2) else shade(pick(colors, 1), rng:NextNumber(0.92, 1.08))
-		solid(column(parent, "Needles", base * CFrame.new(0, y, 0), tier[1] * s, tier[2] * s, color, Enum.Material.SmoothPlastic))
-		y += tier[2] * s * 0.8
-	end
-	return 12 * s
-end
-
-BUILDERS.tree = function(parent, base, s, colors, rng)
-	local height = rng:NextNumber(12, 18) * s
-	solid(column(parent, "Trunk", base * CFrame.new(0, -1, 0), 1.8 * s, height + 1, pick(colors, 1), Enum.Material.Wood))
-	local crown = rng:NextNumber(16, 22) * s
-	solid(ball(parent, "Crown", base:PointToWorldSpace(Vector3.new(0, height + crown * 0.3, 0)), crown, pick(colors, 2), Enum.Material.SmoothPlastic))
-	if rng:NextNumber() < 0.6 then
-		local side = Vector3.new(rng:NextNumber(-1, 1), 0, rng:NextNumber(-1, 1)).Unit * crown * 0.4
-		ball(parent, "Crown", base:PointToWorldSpace(side + Vector3.new(0, height + crown * 0.1, 0)), crown * 0.7, pick(colors, 3), Enum.Material.SmoothPlastic)
-	end
-	return crown * 0.6
-end
-
-BUILDERS.mushroom = function(parent, base, s, colors, rng)
-	local height = rng:NextNumber(10, 18) * s
-	local cap = rng:NextNumber(14, 22) * s
-	local glow = pick(colors, rng:NextInteger(2, 3))
-	solid(column(parent, "Stem", base * CFrame.new(0, -1, 0), 2.2 * s, height + 1, pick(colors, 1), Enum.Material.SmoothPlastic))
-	solid(column(parent, "Cap", base * CFrame.new(0, height, 0), cap / 2, 2.5 * s, glow, Enum.Material.Neon))
-	ball(parent, "Dome", base:PointToWorldSpace(Vector3.new(0, height + 1.5 * s, 0)), cap * 0.8, shade(glow, 0.85), Enum.Material.Neon)
-	return cap / 2
-end
-
-BUILDERS.bush = function(parent, base, s, colors, rng)
-	local count = rng:NextInteger(2, 3)
-	for i = 1, count do
-		local d = rng:NextNumber(7, 12) * s
-		local offset = Vector3.new(rng:NextNumber(-5, 5) * s, d * 0.25, rng:NextNumber(-5, 5) * s)
-		ball(parent, "Bush", base:PointToWorldSpace(offset), d, pick(colors, i), Enum.Material.SmoothPlastic)
-	end
-	return 10 * s
-end
-
-BUILDERS.cactus = function(parent, base, s, colors, rng)
-	local color = pick(colors, 1)
-	local height = rng:NextNumber(14, 24) * s
-	local r = 2.4 * s
-	solid(column(parent, "Cactus", base * CFrame.new(0, -1, 0), r, height + 1, color, Enum.Material.SmoothPlastic))
-	ball(parent, "Cactus", base:PointToWorldSpace(Vector3.new(0, height, 0)), r * 2, color, Enum.Material.SmoothPlastic)
-	local arms = rng:NextInteger(1, 2)
-	for i = 1, arms do
-		local side = if i == 1 then 1 else -1
-		local y = height * rng:NextNumber(0.35, 0.6)
-		local reach = rng:NextNumber(4, 6) * s
-		local arm = base * CFrame.new(0, y, 0) * CFrame.Angles(0, 0, -side * math.rad(90))
-		column(parent, "Arm", arm, r * 0.7, reach, color, Enum.Material.SmoothPlastic)
-		column(parent, "Arm", base * CFrame.new(side * reach, y - r * 0.3, 0), r * 0.7, height * 0.35, color, Enum.Material.SmoothPlastic)
-	end
-	return 8 * s
-end
-
-BUILDERS.deadTree = function(parent, base, s, colors, rng)
-	local color = pick(colors, 1)
-	local height = rng:NextNumber(14, 22) * s
-	solid(column(parent, "Trunk", base * CFrame.new(0, -1, 0), 1.5 * s, height + 1, color, Enum.Material.Wood))
-	for i = 1, 3 do
-		local y = height * (0.45 + i * 0.15)
-		local turn = rng:NextNumber(0, math.pi * 2)
-		local branch = base * CFrame.new(0, y, 0) * CFrame.Angles(0, turn, 0) * CFrame.Angles(0, 0, math.rad(rng:NextNumber(40, 65)))
-		column(parent, "Branch", branch, 0.8 * s, rng:NextNumber(6, 10) * s, color, Enum.Material.Wood)
-	end
-	return 8 * s
-end
-
-BUILDERS.crystal = function(parent, base, s, colors, rng)
-	local count = rng:NextInteger(3, 5)
-	for i = 1, count do
-		local height = (if i == 1 then rng:NextNumber(18, 30) else rng:NextNumber(8, 18)) * s
-		local width = height * rng:NextNumber(0.2, 0.3)
-		local tilt = CFrame.Angles(rng:NextNumber(-0.5, 0.5), rng:NextNumber(0, 6.28), rng:NextNumber(-0.5, 0.5))
-		local offset = Vector3.new(rng:NextNumber(-5, 5) * s, 0, rng:NextNumber(-5, 5) * s)
-		local frame = base * CFrame.new(offset) * tilt
-		local part = box(parent, "Crystal", frame * CFrame.new(0, height / 2 - 2, 0), Vector3.new(width, height, width), pick(colors, rng:NextInteger(1, #colors)), Enum.Material.Neon)
-		part.Transparency = 0.15
-	end
-	return 12 * s
-end
-
-BUILDERS.palm = function(parent, base, s, colors, rng)
-	local lean = CFrame.Angles(rng:NextNumber(-0.25, 0.25), 0, rng:NextNumber(-0.25, 0.25))
-	local frame = base * CFrame.new(0, -1, 0)
-	local segment = 7 * s
-	for _ = 1, 3 do
-		solid(column(parent, "Trunk", frame, 1.6 * s, segment + 0.6, pick(colors, 1), Enum.Material.Wood))
-		frame = frame * CFrame.new(0, segment, 0) * lean
-	end
-	local leaves = 6
-	for i = 1, leaves do
-		local leaf = frame * CFrame.Angles(0, (i / leaves) * math.pi * 2 + rng:NextNumber(-0.2, 0.2), 0) * CFrame.Angles(math.rad(-25), 0, 0)
-		box(parent, "Leaf", leaf * CFrame.new(0, 0, -7 * s), Vector3.new(4.5 * s, 0.6 * s, 14 * s), shade(pick(colors, 2), rng:NextNumber(0.9, 1.1)), Enum.Material.SmoothPlastic)
-	end
-	return 10 * s
-end
-
--- 큰 지형지물 ---------------------------------------------------------------
-
-BUILDERS.volcano = function(parent, base, s, colors, rng)
-	local rock = pick(colors, 1)
-	local lava = pick(colors, 2)
-	local sides = 7
-	local bottom = rng:NextNumber(200, 250) * s
-	local topR = bottom * rng:NextNumber(0.22, 0.3)
-	local height = rng:NextNumber(220, 290) * s
-	local ring1: { Vector3 } = {}
-	local ring2: { Vector3 } = {}
-	local turn = rng:NextNumber(0, math.pi * 2)
-	for i = 1, sides do
-		local angle = turn + (i - 1) / sides * math.pi * 2
-		local r1 = bottom * rng:NextNumber(0.85, 1.1)
-		local r2 = topR * rng:NextNumber(0.85, 1.1)
-		ring1[i] = base:PointToWorldSpace(Vector3.new(math.cos(angle) * r1, -30, math.sin(angle) * r1))
-		ring2[i] = base:PointToWorldSpace(Vector3.new(math.cos(angle) * r2, height, math.sin(angle) * r2))
-	end
-	local inside = base:PointToWorldSpace(Vector3.new(0, height * 0.3, 0))
-	for i = 1, sides do
-		local j = i % sides + 1
-		local color = shade(rock, rng:NextNumber(0.88, 1.1))
-		triangle(parent, ring1[i], ring1[j], ring2[j], inside, 8, color, Enum.Material.Basalt)
-		triangle(parent, ring1[i], ring2[j], ring2[i], inside, 8, color, Enum.Material.Basalt)
-	end
-	column(parent, "Crater", base * CFrame.new(0, height - 6, 0), topR * 0.95, 5, lava, Enum.Material.Neon)
-	-- 용암 줄기 두세 개가 비탈을 타고 내려옴
-	for _ = 1, rng:NextInteger(2, 3) do
-		local i = rng:NextInteger(1, sides)
-		local from = ring2[i]
-		local to = ring1[i]:Lerp(ring1[i % sides + 1], 0.35)
-		local mid = from:Lerp(to, 0.5)
-		local outward = (mid - inside).Unit
-		local flow = box(parent, "LavaFlow", CFrame.lookAt(mid + outward * 4, to + outward * 4), Vector3.new(14 * s, 3, (to - from).Magnitude * 0.92), lava, Enum.Material.Neon)
-		flow.CastShadow = false
-	end
-	return bottom
-end
-
-BUILDERS.mountain = function(parent, base, s, colors, rng)
-	local radius = rng:NextNumber(200, 280) * s
-	local height = rng:NextNumber(230, 330) * s
-	local apex = Vector3.new(rng:NextNumber(-0.15, 0.15) * radius, height, rng:NextNumber(-0.15, 0.15) * radius)
-	pyramid(parent, base, radius, apex, 6, pick(colors, 1), Enum.Material.Rock, rng, 30)
-	-- 눈 덮인 꼭대기: 같은 꼭짓점에서 작은 각뿔을 조금 바깥으로
-	local capBase = base * CFrame.new(apex * 0.68)
-	pyramid(parent, capBase, radius * 0.36, apex * 0.32 + Vector3.new(0, 3, 0), 6, pick(colors, 2), Enum.Material.Snow, rng, 0)
-	return radius
-end
-
-BUILDERS.giantTree = function(parent, base, s, colors, rng)
-	local height = rng:NextNumber(150, 210) * s
-	solid(column(parent, "Trunk", base * CFrame.new(0, -6, 0), 15 * s, height + 6, pick(colors, 1), Enum.Material.Wood))
-	for i = 1, 3 do
-		local d = rng:NextNumber(100, 150) * s
-		local offset = Vector3.new(rng:NextNumber(-40, 40) * s, height + rng:NextNumber(-10, 40) * s, rng:NextNumber(-40, 40) * s)
-		ball(parent, "Crown", base:PointToWorldSpace(offset), d, pick(colors, 1 + i), Enum.Material.Grass)
-	end
-	return 90 * s
-end
-
-BUILDERS.mesa = function(parent, base, s, colors, rng)
-	local radius = rng:NextNumber(120, 190) * s
-	local y = -20
-	for i = 1, 3 do
-		local height = rng:NextNumber(50, 80) * s + (if i == 1 then 20 else 0)
-		local layer = column(parent, "Mesa", base * CFrame.new(0, y, 0), radius, height, pick(colors, i), Enum.Material.Sandstone)
-		layer.CanCollide = true
-		y += height
-		radius *= rng:NextNumber(0.82, 0.92)
-	end
-	return radius * 1.4
-end
-
-BUILDERS.arch = function(parent, base, s, colors, rng)
-	local color = pick(colors, 1)
-	local span = rng:NextNumber(110, 150) * s
-	local height = rng:NextNumber(110, 150) * s
-	local leg = Vector3.new(34 * s, height + 20, 34 * s)
-	box(parent, "Arch", base * CFrame.new(-span / 2, height / 2 - 10, 0) * CFrame.Angles(0, 0, math.rad(-6)), leg, color, Enum.Material.Sandstone)
-	box(parent, "Arch", base * CFrame.new(span / 2, height / 2 - 10, 0) * CFrame.Angles(0, 0, math.rad(6)), leg, shade(color, 0.92), Enum.Material.Sandstone)
-	box(parent, "Arch", base * CFrame.new(0, height, 0), Vector3.new(span + 50 * s, 26 * s, 36 * s), shade(color, 1.06), Enum.Material.Sandstone)
-	return span * 0.8
-end
-
-BUILDERS.spire = function(parent, base, s, colors, rng)
-	local count = rng:NextInteger(3, 5)
-	for i = 1, count do
-		local height = (if i == 1 then rng:NextNumber(220, 320) else rng:NextNumber(90, 190)) * s
-		local width = height * rng:NextNumber(0.16, 0.24)
-		local tilt = CFrame.Angles(rng:NextNumber(-0.35, 0.35), rng:NextNumber(0, 6.28), rng:NextNumber(-0.35, 0.35))
-		local offset = Vector3.new(rng:NextNumber(-50, 50) * s, 0, rng:NextNumber(-50, 50) * s)
-		local frame = base * CFrame.new(offset) * tilt
-		local part = box(parent, "Spire", frame * CFrame.new(0, height / 2 - 20, 0), Vector3.new(width, height, width), pick(colors, i), Enum.Material.Neon)
-		part.Transparency = 0.1
-	end
-	return 90 * s
-end
-
-BUILDERS.seaStack = function(parent, base, s, colors, rng)
-	local radius = rng:NextNumber(30, 50) * s
-	local height = rng:NextNumber(90, 160) * s
-	local rock = column(parent, "Stack", base * CFrame.new(0, -20, 0), radius, height + 20, pick(colors, 1), Enum.Material.Rock)
-	rock.CanCollide = true
-	column(parent, "StackTop", base * CFrame.new(0, height, 0), radius * 1.05, 6 * s, pick(colors, 2), Enum.Material.Grass)
-	return radius + 10
-end
-
-BUILDERS.lighthouse = function(parent, base, s, colors, rng)
-	local white = pick(colors, 1)
-	local red = pick(colors, 2)
-	local y = -4
-	local radius = 14 * s
-	for i = 1, 5 do
-		local height = 22 * s
-		solid(column(parent, "Lighthouse", base * CFrame.new(0, y, 0), radius, height, if i % 2 == 1 then white else red, Enum.Material.SmoothPlastic))
-		y += height
-		radius *= 0.93
-	end
-	column(parent, "Lamp", base * CFrame.new(0, y, 0), radius * 0.9, 12 * s, pick(colors, 3), Enum.Material.Neon)
-	column(parent, "Roof", base * CFrame.new(0, y + 12 * s, 0), radius * 1.15, 5 * s, red, Enum.Material.SmoothPlastic)
-	return 30 * s
-end
+local BUILDERS: { [string]: Builder } = PlanetProps
 
 -- 바다 위에 서는 지형지물
 local ON_SEA: { [string]: boolean } = { seaStack = true }
@@ -968,6 +669,7 @@ local function build(planet: Planets.Planet, seed: number)
 			item.CastShadow = true
 		end
 	end
+	PlanetMood.decorate(props, planet.Id) -- 떠다니는 입자·소품 불빛 (소품과 함께 움직이고 숨음)
 	addLayer("core", core)
 	addLayer("props", props)
 
@@ -1008,19 +710,21 @@ end
 -- 행성 가운데가 화면에 놓일 높이각(도, 아래가 -)과 옆으로 비킬 방위(도). alpha = 행성이 보이는 각반지름(도)
 function Planet.placement(alpha: number, inside: boolean): (number, number)
 	if inside then
-		-- 선실 외창(높이각 약 -13 ~ +8도): 크면 지평선(공의 위 끝)을 -5도에 두고, 작아질수록 위 끝을 +6도까지 올림.
-		-- 각반지름 7.5도 이하면 공이 통째로 창 안(-1.5도 중심, 창 아래쪽의 내 캐릭터 머리 위)에 들어옴. 위 끝이 창 위로 넘어가지 않음
+		-- 선실 +Z 외창: 선실 어디에 서 있든(카메라 높이 약 125~135) 창 아래 끝은 높이각 -5도보다 아래, 위 끝은 +19도보다 위.
+		-- 크면 지평선(공의 위 끝)을 -3도에 두고, 작아질수록 위 끝을 +9.5도까지 올림.
+		-- 각반지름 7.5도 이하면 공이 통째로 창 안(중심 +2도)에 들어옴. 위 끝이 창 위로 넘어가지 않음
 		local top: number
 		if alpha <= 7.5 then
-			top = -1.5 + alpha
+			top = 2 + alpha
 		else
-			top = lerp(6, -5, smoothstep((alpha - 7.5) / 22.5))
+			top = lerp(9.5, -3, smoothstep((alpha - 7.5) / 22.5))
 		end
 		return top - alpha, 0
 	end
-	-- 바깥 시점(화면 아래 끝 약 -26도): 크면 지평선을 -10도에, 작아지면 로켓과 화면 아래 미션 판에 덜 가리게 왼쪽 위(27도, -9도)로
+	-- 바깥 시점(화면 아래 끝 약 -38도, 로켓 밑동 -7도): 크면 지평선을 로켓 밑동 바로 아래(-10도)에, 작아지면 로켓·추진운과
+	-- 화면 아래 미션 판, 왼쪽 비행 정보 판에 덜 가리게 왼쪽 아래(27도, -14도)로
 	local t = smoothstep((alpha - 12) / 23)
-	return lerp(-9, -10 - alpha, t), lerp(27, 0, t)
+	return lerp(-14, -10 - alpha, t), lerp(27, 0, t)
 end
 
 -- 카메라 위치와 거리(km)로 행성의 자리를 계산: 행성 중심 위치, 회전, 크기 배율.
@@ -1038,7 +742,13 @@ function Planet.pose(km: number, camera: Vector3, center0: Vector3): (Vector3, C
 	local alpha = math.deg(math.asin(math.clamp(RADIUS / distance, 0, 1)))
 	local trueElevation = math.atan2(toCenter.Y, across)
 	local farElevation, farAzimuth = Planet.placement(alpha, inside)
-	local weight = if inside then 1 else smoothstep(altitude / OUTSIDE_RAMP)
+	-- 처음에는 실제 자리(발사대 아래)에 두었다가, 보이는 고도가 OUTSIDE_RAMP 가 될 때까지 서서히 화면 안 자리로 옮김
+	local weight = smoothstep(altitude / OUTSIDE_RAMP)
+	if inside then
+		-- 선실 안: 걸어다니는 카메라가 어디 있든 +Z 외창 쪽에 보이게, 실제 방향에서 +Z 쪽으로 (가까운 쪽으로) 돌려 둠
+		local heading = math.atan2(toward.X, toward.Z) * (1 - weight)
+		toward = Vector3.new(math.sin(heading), 0, math.cos(heading))
+	end
 	local elevation = lerp(trueElevation, math.rad(farElevation), weight)
 	local azimuth = math.rad(farAzimuth) * weight
 	local sideways = CFrame.Angles(0, azimuth, 0):VectorToWorldSpace(toward)
@@ -1124,6 +834,7 @@ local function findPad()
 			table.insert(padParts, { part = item, cframe = item.CFrame, size = item.Size })
 		end
 	end
+	padModel = found
 end
 
 -- ------------------------------------------------------------ 매 프레임
@@ -1152,6 +863,10 @@ function Planet.update(_dt: number)
 	if toastPending ~= "" and not aboard then
 		State.emit("Toast", toastPending)
 		toastPending = ""
+	end
+	if padModel and builtId ~= "" and padTint ~= builtId then
+		padTint = builtId
+		PlanetMood.tintPad(padModel :: Instance, builtId)
 	end
 
 	local camera = Workspace.CurrentCamera
