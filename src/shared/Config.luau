@@ -80,6 +80,25 @@ Config.Mission = {
 	ResultShowSeconds = 1.6,
 }
 
+-- 부품 피버타임 (Nick 11-28, 수치는 임시): 방향 미션이 판정될 때마다 로켓에 꽂힌 부품 하나하나가 따로 무작위로
+-- 피버에 들어가고, 다음 미션 판정까지 이어집니다 (그때 다시 뽑음). 피버 중인 부품은 둘레에 반짝임이 뜹니다.
+-- 부품 주인이 그 미션에 성공했으면 SuccessChance, 아니면(실패·자리 비움·나감) FailChance.
+-- 피버 동안 로켓 속도 × (1 + SpeedBonus × 피버 부품 수 / 꽂힌 부품 수): 전부 피버면 +50%.
+-- 봇 10명 보통 실력이면 평균 28%가 피버(속도 +14%), 시뮬레이션 200판 평균 거리 +15% (20.2 → 23.3 km).
+-- 조립 화면의 예상 거리도 이 평균을 넣어 계산합니다 (Fever.expected).
+Config.Fever = {
+	SuccessChance = 0.3,
+	FailChance = 0.1,
+	SpeedBonus = 0.5,
+	-- 디버그 패널에서 바꾸는 시험 방식. 전부 피버 = 미션마다 모든 부품이 피버 (반짝임·휴대폰 성능 확인용)
+	Default = "normal",
+	Modes = {
+		{ Id = "normal", Name = "보통" },
+		{ Id = "all", Name = "전부 피버" },
+		{ Id = "off", Name = "끄기" },
+	},
+}
+
 -- 선장 발사 버튼
 Config.Captain = {
 	PerfectWindow = 0.12, -- 0초와의 차이가 이 안이면 완벽

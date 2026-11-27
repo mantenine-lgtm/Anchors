@@ -234,6 +234,11 @@ local function onMissionResult(info: any)
 	else
 		ownLabel.Text = ""
 	end
+	-- 부품 피버 (Nick 11-28): 이번 판정으로 피버에 들어간 내 부품 수
+	local feverMine = if type(info.feverMine) == "number" then info.feverMine else 0
+	if feverMine > 0 and (own == "success" or own == "fail") then
+		ownLabel.Text ..= string.format(" · 내 부품 %d개 피버!", feverMine)
+	end
 	ownLabel.Visible = ownLabel.Text ~= ""
 	showPanel(Config.Mission.ResultShowSeconds)
 

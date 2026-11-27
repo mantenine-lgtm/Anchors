@@ -1,6 +1,7 @@
 -- 선실 부품 장착판: -X 벽의 큰 화면. 이번 판 부품 그리드 6개(종류마다 하나)에 누가 어디에 꽂았는지 보여 줍니다.
 -- 조립 중에는 꽂히는 대로 바로 채워지고, 비행·정산 동안에는 장착한 그대로 남습니다.
 -- 내 부품 칸은 분홍(BuildUi.MineColor) 굵은 테두리와 분홍 '나' 딱지, 남의 칸은 조금 흐리게 (Nick 11-27: 내 부품은 구별되게).
+-- 비행 중 피버에 들어간 부품 칸은 금빛 테두리와 별빛이 반짝이고(FeverFx), 제목 줄에 피버 부품 수가 뜸 (Nick 11-28).
 -- 그리드는 조립 화면(BuildUi)과 같은 서버 자료(RoundState.Grid 폴더의 속성, 서버 Assembly.luau)를 읽어 그립니다.
 -- 화면은 클라이언트가 만들어 서버의 PartsBoard 파트 앞면에 붙입니다.
 
@@ -14,6 +15,7 @@ local Fmt = require(Shared:WaitForChild("Fmt"))
 local Net = require(Shared:WaitForChild("Net"))
 
 local BuildUi = require(script.Parent:WaitForChild("BuildUi"))
+local FeverFx = require(script.Parent:WaitForChild("FeverFx"))
 local State = require(script.Parent:WaitForChild("State"))
 local Ui = require(script.Parent:WaitForChild("Ui"))
 
@@ -36,7 +38,7 @@ local TAKEN_FADE = BuildUi.TakenFade or 0.4
 
 local stateFolder: Instance = ReplicatedStorage:WaitForChild(Net.StateName)
 
-type Cell = { frame: Frame, stroke: UIStroke, mark: TextLabel?, look: string }
+type Cell = { frame: Frame, stroke: UIStroke, mark: TextLabel?, look: string, fever: FeverFx.Glints? }
 type Card = { count: TextLabel, cells: { [number]: Cell } }
 
 local gui: SurfaceGui? = nil
@@ -59,6 +61,13 @@ end
 
 -- 종류마다 카드(제목 + 그리드). 조립 화면처럼 발사·비행·버튼 입력 순으로 3열, 열마다 2종류
 local function makeCards(size: number)
+	for _, card in pairs(cards) do
+		for _, cell in pairs(card.cells) do
+			if cell.fever then
+				FeverFx.release(cell.fever)
+			end
+		end
+	end
 	cardsFrame:ClearAllChildren()
 	table.clear(cards)
 	local marks = size <= 6 -- 칸이 크면 내 칸에 '나'를 씀
@@ -120,7 +129,7 @@ local function makeCards(size: number)
 				})
 				Ui.corner(mark :: TextLabel, 6)
 			end
-			card.cells[cellIndex] = { frame = cellFrame, stroke = stroke, mark = mark, look = "" }
+			card.cells[cellIndex] = { frame = cellFrame, stroke = stroke, mark = mark, look = "", fever = nil }
 		end
 		cards[info.Id] = card
 	end
@@ -155,6 +164,26 @@ local function paint(cell: Cell, look: string, color: Color3)
 	end
 end
 
+-- 피버 반짝임을 켜고 끔. 처음 켤 때 만들어 두고 다시 씀. 칸이 작을수록 별빛이 적고(3·2·1개) 테두리도 가늘게 (50명 판도 가볍게)
+local function showFever(cell: Cell, on: boolean)
+	local glints = cell.fever
+	if glints == nil then
+		if not on then
+			return
+		end
+		local big = builtSize <= 6
+		local stars = if builtSize <= 5 then 3 elseif builtSize <= 7 then 2 else 1
+		glints = FeverFx.glints(cell.frame, stars, 0.6, if big then 8 else 5, if big then 4 else 2)
+		cell.fever = glints
+	end
+	local g = glints :: FeverFx.Glints
+	if g.on ~= on then
+		FeverFx.show(g, on)
+		-- 칸 밖으로 나온 테두리·별빛이 옆 칸에 가리지 않게 위로
+		cell.frame.ZIndex = if on then 2 else 1
+	end
+end
+
 -- 서버 자료를 다시 읽어 칸·숫자·제목 줄을 맞춤
 local function refresh()
 	local folder = gridFolder()
@@ -179,7 +208,8 @@ local function refresh()
 	cardsFrame.Visible = true
 	idleLabel.Visible = false
 	local mySeat = if State.role() == "Crew" then State.myNumber("Seat") else 0
-	local placedAll, openAll = 0, 0
+	local flying = phase == "Flight"
+	local placedAll, openAll, feverAll = 0, 0, 0
 	for _, info in ipairs(Config.Parts.Types) do
 		local card = cards[info.Id]
 		local typeFolder = folder:FindFirstChild(info.Id)
@@ -190,16 +220,22 @@ local function refresh()
 			for index, cell in pairs(card.cells) do
 				local value = attrs["C" .. tostring(index)]
 				local look = "closed"
+				local fevered = false
 				if type(value) == "number" then
 					opened += 1
 					if value > 0 then
 						placed += 1
 						look = if value == mySeat and mySeat > 0 then "mine" else "taken"
+						fevered = flying and attrs["F" .. tostring(value)] == true
 					else
 						look = "open"
 					end
 				end
 				paint(cell, look, color)
+				showFever(cell, fevered)
+				if fevered then
+					feverAll += 1
+				end
 			end
 			card.count.Text = string.format("%d/%d", placed, opened)
 			placedAll += placed
@@ -209,6 +245,9 @@ local function refresh()
 	if phase == "Build" then
 		statusLabel.Text = string.format("조립 중 %s · %d/%d개 장착", Fmt.clock(State.phaseLeft()), placedAll, openAll)
 		statusLabel.TextColor3 = C.Yellow
+	elseif feverAll > 0 then
+		statusLabel.Text = string.format("피버 %d개 · 속도 +%s", feverAll, Fmt.percent(State.number("FeverBonus")))
+		statusLabel.TextColor3 = FeverFx.Gold
 	else
 		statusLabel.Text = string.format("장착 완료 · %d개", placedAll)
 		statusLabel.TextColor3 = C.Green

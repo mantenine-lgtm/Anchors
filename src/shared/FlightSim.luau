@@ -47,6 +47,7 @@ export type Sim = {
 	turboMultiplier: number, -- 터보 엔진이 켜져 있는 동안의 속도 배율
 	resonanceUntil: number, -- 공명 코어가 끝나는 시각 (안 썼으면 -1)
 	resonanceMultiplier: number, -- 공명 코어가 켜져 있는 동안의 미션 가속 배율
+	fever: number, -- 부품 피버 속도 배율 (1 = 피버 없음). 미션 판정 때 서버가 정함 (Fever.luau)
 }
 
 -- 파워 자릿수: 파워가 10배가 되면 1씩 늘어남
@@ -92,6 +93,7 @@ function FlightSim.new(totals: Totals, captainBonus: number): Sim
 		turboMultiplier = 1,
 		resonanceUntil = -1,
 		resonanceMultiplier = 1,
+		fever = 1,
 	}
 end
 
@@ -139,7 +141,12 @@ local function turboFactor(sim: Sim): number
 end
 
 function FlightSim.speed(sim: Sim): number
-	return sim.vb * (1 + sim.boost) * turboFactor(sim)
+	return sim.vb * (1 + sim.boost) * turboFactor(sim) * sim.fever
+end
+
+-- 부품 피버 속도 배율을 바꿈 (다음 미션 판정까지 그대로)
+function FlightSim.setFever(sim: Sim, multiplier: number)
+	sim.fever = if multiplier > 0 then multiplier else 1
 end
 
 -- 미션 판정 반영. r = 팀 성공률(0~1)
@@ -165,7 +172,7 @@ function FlightSim.step(sim: Sim, missionRate: number?)
 	if missionRate ~= nil then
 		FlightSim.applyMission(sim, missionRate)
 	end
-	local v = sim.vb * (1 + sim.boost) * turboFactor(sim)
+	local v = sim.vb * (1 + sim.boost) * turboFactor(sim) * sim.fever
 	sim.x += v * dt
 	sim.w *= math.exp((F.WaveRate + F.WaveRateGrowth * sim.t) * dt)
 	sim.s += sim.w * dt
@@ -195,7 +202,7 @@ end
 -- 구원 연료: 로켓 속도를 충격파 속도까지 끌어올리고 잠깐 같이 가속
 function FlightSim.rescue(sim: Sim)
 	local R = Config.Rescue
-	local need = sim.w * R.Match / ((1 + sim.boost) * turboFactor(sim))
+	local need = sim.w * R.Match / ((1 + sim.boost) * turboFactor(sim) * sim.fever)
 	if sim.vb < need then
 		sim.vb = need
 	end
@@ -243,11 +250,15 @@ function FlightSim.runToEnd(sim: Sim)
 end
 
 -- 미션 성공률이 계속 missionRate 라고 보고 처음부터 끝까지 계산. 거리(km)와 시간(초)을 돌려줌.
-function FlightSim.predict(totals: Totals, captainBonus: number, missionRate: number): (number, number)
+-- fever 를 주면 첫 미션 판정부터 그 속도 배율로 봄 (부품 피버의 평균, Fever.expected). 안 주면 피버 없음.
+function FlightSim.predict(totals: Totals, captainBonus: number, missionRate: number, fever: number?): (number, number)
 	local sim = FlightSim.new(totals, captainBonus)
 	local nextMission = Config.Mission.FirstAt
 	while not sim.ended and sim.t < Config.Phase.FlightMax do
 		if sim.t >= nextMission then
+			if fever ~= nil then
+				FlightSim.setFever(sim, fever)
+			end
 			FlightSim.step(sim, missionRate)
 			nextMission += Config.Mission.Interval
 		else
