@@ -234,31 +234,36 @@ Config.Atmosphere = {
 }
 
 -- 회색 상자 월드 치수(스터드). 로켓은 원점에 서 있고 배경이 움직입니다.
+-- 선실은 승무원이 걸어다니는 둥근 방이고 4면으로 나뉩니다 (Cabin.luau):
+-- +Z·-Z 는 외창, +X 는 진행도 전광판(Board), -X 는 부품 장착판(PartsBoard)과 그 아래 내 부품 판(MyPartsBoard).
+-- 전광판들은 둥근 벽 앞에 세운 평평한 벽에 붙음.
 Config.World = {
 	GroundSize = 2048,
 	MountRadius = 46,
 	MountHeight = 4,
 	RocketBaseY = 12, -- 선체 바닥
 	RocketTopY = 212, -- 선체 꼭대기(코 제외)
-	HullRadius = 26,
-	CabinRadius = 24,
+	HullRadius = 38,
+	CabinRadius = 36, -- 선실 바닥 반지름 (100명이 서도 한 사람에 약 40 제곱스터드)
 	CabinFloorY = 120,
 	CabinCeilY = 160,
-	WallSegments = 36,
-	WindowHalfAngle = 50, -- 외창이 차지하는 각도의 절반(도)
-	WindowBottomY = 123,
-	WindowTopY = 146,
-	BoardWidth = 34, -- 전광판은 외창 위 벽에서 조금 앞으로 나와 매달려 있음 (둥근 벽에 모서리가 묻히지 않게)
-	BoardHeight = 11,
-	BoardY = 150.5,
-	BoardZ = 13,
-	SeatRadius = 19,
-	SeatSpacing = 5.5,
-	SeatFirstRowY = 125,
-	SeatRowHeight = 7,
-	SeatsPerRowMax = 10,
-	SeatReclineDeg = 40, -- 의자가 뒤로 젖혀진 각도
-	SeatRootOffset = 1.9, -- 의자 판에서 캐릭터 중심까지 높이
+	WallSegments = 48,
+	WindowHalfAngle = 40, -- 외창 하나(+Z, -Z 두 곳)가 차지하는 각도의 절반(도)
+	WindowBottomY = 121, -- 외창 아래 끝 (바닥 위 1 스터드). 낮게 두어 선실 어디에서 보든 창 너머 행성이 보임 (Planet.placement)
+	WindowTopY = 154,
+	PanelWallX = 28, -- 전광판을 붙이는 평평한 벽: 선실 가운데에서 ±X 로 이 거리 (벽 너비 약 45)
+	BoardWidth = 40, -- 진행도 전광판 (+X 벽)
+	BoardHeight = 20,
+	BoardY = 140, -- 전광판 가운데 높이 (바닥에서 20)
+	PartsBoardWidth = 40, -- 부품 장착판 (-X 벽 위쪽)
+	PartsBoardHeight = 20,
+	PartsBoardY = 147,
+	MyPartsBoardWidth = 40, -- 내 부품 판 (-X 벽, 부품 장착판 바로 아래). 화면은 사람마다 자기 부품을 그림
+	MyPartsBoardHeight = 9,
+	MyPartsBoardY = 130.5,
+	SpotRadius = 26, -- 탑승 자리(승무원이 처음 서는 곳)를 퍼뜨리는 반지름
+	SpotHeight = 3.5, -- 탑승 자리 바닥에서 캐릭터 중심까지 (조금 떠서 내려앉음)
+	CabinMaxZoom = 30, -- 선실 안에서 카메라가 내 캐릭터에서 멀어질 수 있는 최대 거리
 	SpawnDistance = 95, -- 로켓 중심에서 리스폰 지점까지
 	OutsideCamera = { 130, 90, 205 }, -- 바깥 시점 카메라 자리 (x, y, z)
 	StudsPerMeter = 3.57,

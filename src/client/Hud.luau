@@ -85,7 +85,8 @@ local endUntil = 0
 -- 화면 번쩍임
 local flashFrame: Frame
 
--- 한 줄 안내·위기 경고·아이템 알림을 두는 높이 (화면 높이에 대한 비율). 선실 전광판 바로 아래, 틈은 화면 높이의 2%.
+-- 한 줄 안내·위기 경고·아이템 알림을 두는 높이 (화면 높이에 대한 비율). State.boardBottom(예전 고정 선실 카메라에서
+-- 전광판 아래 끝이 오던 자리) 바로 아래, 틈은 화면 높이의 2%.
 local UNDER_BOARD_GAP = 0.02
 -- 승무원이 많아 전광판이 화면 아래쪽까지 보이면, 아이템 알림(안내에서 +72, 높이 42)이 그 아래 '감사 N'
 -- (아래 끝이 화면 아래에서 270, 높이 30)에 닿기 직전에서 멈춤. 한도는 화면 높이(기준 단위)로 계산합니다.
@@ -120,7 +121,7 @@ local function boardBottomOnGui(): number
 	return State.boardBottom
 end
 
--- 전광판이 화면에 보이는 자리가 바뀌면(승무원 수에 따라 카메라가 달라짐) 그 아래 글자도 따라 옮김
+-- 기준 높이(State.boardBottom)가 바뀌면 그 아래 글자도 따라 옮김 (화면 크기·휴대폰 안전 영역이 바뀔 때도)
 local function placeUnderBoard()
 	local height = rootHeight()
 	local lowest = (height - THANKS_TOP - BANNER_BOTTOM) / height
@@ -149,9 +150,8 @@ end
 
 -- ------------------------------------------------------------ 만들기
 local function buildBanner()
-	-- 위쪽 가운데는 위에서부터: 안내 두 줄(0~76) → 선실 전광판이 보이는 자리(화면 높이의 약 14~31%) → 한 줄 안내 → 위기 경고 → 아이템 알림
-	-- 전광판은 창 모양이 바뀌어도 화면 높이의 같은 비율에 보이므로, 그 아래 글자는 높이 비율로 자리를 잡습니다.
-	-- 비율은 매 프레임 placeUnderBoard 가 State.boardBottom(전광판 아래 끝)에 맞춥니다.
+	-- 위쪽 가운데는 위에서부터: 안내 두 줄(0~76) → 빈 자리(화면 높이의 약 14~31%, 선실이 보임) → 한 줄 안내 → 위기 경고 → 아이템 알림
+	-- 그 아래 글자는 높이 비율로 자리를 잡습니다. 비율은 매 프레임 placeUnderBoard 가 State.boardBottom 에 맞춥니다.
 	local banner = Ui.frame(root, "Banner", {
 		AnchorPoint = Vector2.new(0.5, 0),
 		Position = UDim2.new(0.5, 0, 0, 4),
@@ -603,15 +603,12 @@ local function fillResults(data: any)
 end
 
 -- ------------------------------------------------------------ 하트
-local function seatScreenPoint(seat: number): Vector2?
+-- 승무원 번호 seat 인 사람(봇) 머리 위가 화면의 어디인지 (화면 글자 판에 대한 비율). 화면 밖이면 nil
+local function memberScreenPoint(seat: number): Vector2?
 	local camera = workspace.CurrentCamera
-	local rofly = workspace:FindFirstChild("Rofly")
-	local rocket = rofly and rofly:FindFirstChild("Rocket")
-	local seats = rocket and rocket:FindFirstChild("Seats")
-	local model = seats and seats:FindFirstChild("Seat" .. tostring(seat))
-	local pad = model and model:FindFirstChild("Pad")
-	if camera and pad and pad:IsA("BasePart") then
-		local point, onScreen = camera:WorldToViewportPoint(pad.Position + Vector3.new(0, 3, 0))
+	local head = State.memberPart(seat)
+	if camera and head then
+		local point, onScreen = camera:WorldToViewportPoint(head.Position + Vector3.new(0, 1.5, 0))
 		if onScreen then
 			local gui = root.Parent :: ScreenGui
 			local size = gui.AbsoluteSize
@@ -624,8 +621,8 @@ local function seatScreenPoint(seat: number): Vector2?
 end
 
 local function flyHeart(fromSeat: number, toSeat: number)
-	local from = seatScreenPoint(fromSeat) or Vector2.new(0.5 + (math.random() - 0.5) * 0.5, 0.8)
-	local to = seatScreenPoint(toSeat) or Vector2.new(0.5, 0.42)
+	local from = memberScreenPoint(fromSeat) or Vector2.new(0.5 + (math.random() - 0.5) * 0.5, 0.8)
+	local to = memberScreenPoint(toSeat) or Vector2.new(0.5, 0.42)
 	local heart = Ui.heart(heartLayer, 34, C.Pink)
 	heart.Position = UDim2.fromScale(from.X, from.Y)
 	local tween = Ui.tween(heart, 0.9, { Position = UDim2.fromScale(to.X, to.Y) }, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut)

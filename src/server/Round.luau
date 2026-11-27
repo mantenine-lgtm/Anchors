@@ -33,7 +33,7 @@ type Member = {
 	player: Player?,
 	isBot: boolean,
 	botIndex: number,
-	seat: number,
+	seat: number, -- 승무원 번호 = 탑승 자리 번호 (속성 Seat). 의자는 없지만 조립 그리드·클로즈업·하트가 이 번호로 사람을 알아봄
 	isCaptain: boolean,
 	loadout: { [string]: number },
 	power: number,
@@ -337,9 +337,10 @@ local function runBuild(joined: { Player }): any
 		table.insert(crew, newMember("b" .. tostring(i), Bots.name(i), nil, i))
 	end
 
-	-- 좌석: 선장은 맨 윗줄 가운데, 나머지는 윗줄부터 채우고 줄 안에서는 가운데부터 (사람 먼저, 그다음 봇)
+	-- 탑승 자리(= 승무원 번호 member.seat): 선장은 선실 가운데, 나머지는 가운데에서 가까운 자리부터 (사람 먼저, 그다음 봇).
+	-- 탑승한 뒤로는 선실 안을 자유롭게 걸어다닙니다(의자 없음).
 	local captain = pickCaptain(crew)
-	local order = World.buildSeats(#crew)
+	local order = World.buildSpots(#crew)
 	local nextSeat = 1
 	if captain then
 		captain.isCaptain = true
@@ -357,7 +358,7 @@ local function runBuild(joined: { Player }): any
 	for _, member in ipairs(crew) do
 		local player = member.player
 		if player then
-			Seating.seat(player, member.seat, member.isCaptain)
+			Seating.board(player, member.seat, member.isCaptain)
 		else
 			Bots.place(member.botIndex, member.seat)
 		end
@@ -995,11 +996,11 @@ local function runResults(round: any)
 	waitPhase(Config.Phase.Results)
 end
 
--- 판 정리: 좌석·봇을 치우고 모두 발사장으로
+-- 판 정리: 탑승 자리·봇을 치우고 모두 발사장으로
 local function cleanup()
 	current = nil
 	Bots.clear()
-	World.clearSeats()
+	World.clearSpots()
 	Assembly.clear(state)
 	showBuild(nil, "")
 	state:SetAttribute("CrewCount", 0)

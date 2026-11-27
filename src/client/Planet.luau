@@ -10,7 +10,8 @@
 --  · 비행: 로켓은 원점에 그대로 있고 행성 쪽을 움직입니다. 처음 몇 초는 실제처럼 아래로 내려가고,
 --    그 뒤로는 '보이는 고도'가 거리(km)의 0.38제곱으로 느리게 늘어 행성이 점점 작아지는 공이 됩니다.
 --    카메라는 옆을 보고 있으므로 행성을 시선 아래쪽으로 돌려 놓아 화면에 계속 보이게 합니다
---    (선실 창: 지평선이 창 아래쪽에 걸림. 바깥 시점: 로켓 뒤 아래쪽, 작아지면 옆으로 비킴).
+--    (선실: 선실 어디에 서 있든 +Z 외창 너머, 지평선이 창 아래쪽에 걸림. 바깥 시점: 로켓 뒤 아래쪽, 작아지면 옆으로 비킴).
+--    발사 전과 발사 직후에는 실제 자리(발사대 아래)에 있다가 보이는 고도가 오르면서 그 자리로 옮겨 갑니다.
 --    너무 멀면 크기를 줄여 그만큼 가깝게 둡니다(카메라에서 보이는 모습은 같음).
 -- 전부 내 화면에서만 만들고 움직이는 것이라 다른 사람에게 영향이 없습니다.
 
@@ -47,7 +48,7 @@ local FAR_POWER = 0.381 -- (1 km = 각반지름 약 51도, 30 km = 33도, 100 km
 local MAX_DISTANCE = 3000 -- 카메라에서 행성 중심까지 이보다 멀면 크기를 줄여 그만큼 가깝게 둠 (안개에 덜 흐려짐)
 local SCALE_STEPS = 32 -- 크기 배율은 2배마다 이만큼의 단계로만 바꿈 (크기 바꾸기는 무거워서 자주 하지 않음. 보이는 모습은 같음)
 local INSIDE_RADIUS = 120 -- 카메라가 로켓 축에서 이 거리 안이면 선실 시점으로 봄
-local OUTSIDE_RAMP = 350 -- 바깥 시점: 보이는 고도가 이만큼이 될 때까지 실제처럼 내려가다가 서서히 화면 안으로 들어옴
+local OUTSIDE_RAMP = 350 -- 보이는 고도가 이만큼이 될 때까지 실제처럼 내려가다가 서서히 화면 안으로 들어옴 (선실·바깥 시점 모두)
 local PROPS_HIDE_ALTITUDE = 900 -- 보이는 고도가 이보다 높으면 작은 소품은 숨김 (안 보일 만큼 작고, 움직일 파트를 줄임)
 local NEAR_ALTITUDE = 400 -- 이보다 낮을 때는 매 프레임 옮기고, 높으면 초당 20번만 옮김
 local SLOW_INTERVAL = 0.05
@@ -1008,13 +1009,14 @@ end
 -- 행성 가운데가 화면에 놓일 높이각(도, 아래가 -)과 옆으로 비킬 방위(도). alpha = 행성이 보이는 각반지름(도)
 function Planet.placement(alpha: number, inside: boolean): (number, number)
 	if inside then
-		-- 선실 외창(높이각 약 -13 ~ +8도): 크면 지평선(공의 위 끝)을 -5도에 두고, 작아질수록 위 끝을 +6도까지 올림.
-		-- 각반지름 7.5도 이하면 공이 통째로 창 안(-1.5도 중심, 창 아래쪽의 내 캐릭터 머리 위)에 들어옴. 위 끝이 창 위로 넘어가지 않음
+		-- 선실 +Z 외창: 선실 어디에 서 있든(카메라 높이 약 125~135) 창 아래 끝은 높이각 -5도보다 아래, 위 끝은 +19도보다 위.
+		-- 크면 지평선(공의 위 끝)을 -3도에 두고, 작아질수록 위 끝을 +9.5도까지 올림.
+		-- 각반지름 7.5도 이하면 공이 통째로 창 안(중심 +2도)에 들어옴. 위 끝이 창 위로 넘어가지 않음
 		local top: number
 		if alpha <= 7.5 then
-			top = -1.5 + alpha
+			top = 2 + alpha
 		else
-			top = lerp(6, -5, smoothstep((alpha - 7.5) / 22.5))
+			top = lerp(9.5, -3, smoothstep((alpha - 7.5) / 22.5))
 		end
 		return top - alpha, 0
 	end
@@ -1038,7 +1040,13 @@ function Planet.pose(km: number, camera: Vector3, center0: Vector3): (Vector3, C
 	local alpha = math.deg(math.asin(math.clamp(RADIUS / distance, 0, 1)))
 	local trueElevation = math.atan2(toCenter.Y, across)
 	local farElevation, farAzimuth = Planet.placement(alpha, inside)
-	local weight = if inside then 1 else smoothstep(altitude / OUTSIDE_RAMP)
+	-- 처음에는 실제 자리(발사대 아래)에 두었다가, 보이는 고도가 OUTSIDE_RAMP 가 될 때까지 서서히 화면 안 자리로 옮김
+	local weight = smoothstep(altitude / OUTSIDE_RAMP)
+	if inside then
+		-- 선실 안: 걸어다니는 카메라가 어디 있든 +Z 외창 쪽에 보이게, 실제 방향에서 +Z 쪽으로 (가까운 쪽으로) 돌려 둠
+		local heading = math.atan2(toward.X, toward.Z) * (1 - weight)
+		toward = Vector3.new(math.sin(heading), 0, math.cos(heading))
+	end
 	local elevation = lerp(trueElevation, math.rad(farElevation), weight)
 	local azimuth = math.rad(farAzimuth) * weight
 	local sideways = CFrame.Angles(0, azimuth, 0):VectorToWorldSpace(toward)

@@ -30,6 +30,7 @@ local TYPE_STYLE: { [string]: { Color: Color3, Desc: string } } = {
 	nav = { Color = Color3.fromRGB(226, 230, 242), Desc = "미션 성공 가속" },
 	core = { Color = Color3.fromRGB(255, 206, 84), Desc = "콤보 배율" },
 }
+BuildUi.TypeStyle = TYPE_STYLE -- 선실 부품 장착판(PartsBoard)도 같은 색을 씀
 local STARS = { "★", "★★", "★★★", "★★★★" } -- 레어도 (일반·희귀·영웅·전설)
 local CELL_CLOSED = Color3.fromRGB(20, 24, 36)
 local CELL_OPEN = Color3.fromRGB(32, 38, 56)
