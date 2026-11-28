@@ -1,6 +1,7 @@
 -- 부품 뽑기 화면 (Nick 11-28 "부품 뽑기도 추가", "발사 전에 뽑을 수 있게"). 규칙·수치는 Config.Gacha, 서버는 GachaService.
 -- 오른쪽 위 버튼 줄(시점·디버그 아래)의 '부품 뽑기' 버튼으로 엽니다. 탑승 대기·조립·정산 때만 보이고 카운트다운·비행이 되면 닫힘.
--- 화면: 부품 종류 탭 6개 → 지금 그 종류 부품(아이콘·이름·레어도·★·레벨) → 뽑기 하나(확률, 1회·10회 버튼).
+-- 화면: 부품 종류 탭 6개 → 뽑기 하나(확률, 1회·10회 버튼) → 맨 아래 '현재 장착 중' 줄(아이콘·이름·레어도·★·레벨)과
+-- 도감 버튼 (Nick 11-28 "현재 장착중 을 표시", "도감과 현재장착중은 부품 뽑기 제일 밑으로").
 -- 값은 내 최고 기록 km × Config.Gacha.PricePerKm (Nick 11-28 "일반 고급 최고급 넣지 말고 뽑기 일괄").
 -- 뽑기 그림은 캡슐 대신 빛이 새는 우주 보급 상자 (Nick 11-28 "뽑기 아이콘은 캡슐 아이콘 말고 적당한 아이콘", Catalog.GachaIcon).
 -- 뽑으면 보급 상자가 흔들린 뒤 결과 카드가 하나씩 열림 (10회는 11장). 결과마다 '새 부품!' / '★ 돌파' / '경험치 +N'.
@@ -44,11 +45,12 @@ local PANEL_HEIGHT = 610
 local PAD = 16
 local TAB_TOP = 60
 local TAB_HEIGHT = 60
-local INFO_TOP = TAB_TOP + TAB_HEIGHT + 8
-local INFO_HEIGHT = 92
-local BODY_TOP = INFO_TOP + INFO_HEIGHT + 10
+local BODY_TOP = TAB_TOP + TAB_HEIGHT + 8
 local BODY_HEIGHT = 312
-local FOOT_TOP = BODY_TOP + BODY_HEIGHT + 8
+local FOOT_TOP = BODY_TOP + BODY_HEIGHT + 4
+local INFO_HEIGHT = 92
+local INFO_TOP = PANEL_HEIGHT - PAD - INFO_HEIGHT -- '현재 장착 중' 줄과 도감 버튼은 판 맨 아래
+local FOOT_HEIGHT = INFO_TOP - FOOT_TOP - 6 -- 안내 글은 뽑기 칸과 맨 아래 줄 사이
 local NEWS_TOP = 84 -- 위쪽 가운데 안내 두 줄(0~76) 바로 아래
 local PENDING_TIMEOUT = 3 -- 결과가 이만큼(초) 안 오면 버튼을 다시 풂
 local REVEAL_GAP = 0.09 -- 10회 뽑기 카드가 하나씩 열리는 간격(초)
@@ -924,7 +926,7 @@ local function buildPanel()
 		tabs[info.Id] = { button = button, sub = sub, stroke = stroke }
 	end
 
-	-- 지금 부품
+	-- 현재 장착 중 (판 맨 아래, 오른쪽 끝에 도감 버튼)
 	local info = Ui.frame(panel, "Current", {
 		Position = UDim2.fromOffset(PAD, INFO_TOP),
 		Size = UDim2.new(1, -2 * PAD, 0, INFO_HEIGHT),
@@ -936,9 +938,18 @@ local function buildPanel()
 		Position = UDim2.fromOffset(8, 8),
 		Size = UDim2.fromOffset(76, 76),
 	})
+	local equipped = Ui.label(info, "EquippedTag", "현재 장착 중", 15, {
+		Position = UDim2.fromOffset(98, 9),
+		Size = UDim2.fromOffset(104, 24),
+		BackgroundColor3 = BuildUi.MineColor,
+		BackgroundTransparency = 0,
+		TextColor3 = DARK,
+		TextStrokeTransparency = 1,
+	})
+	Ui.corner(equipped, 8)
 	infoName = Ui.label(info, "PartName", "", 24, {
-		Position = UDim2.fromOffset(98, 6),
-		Size = UDim2.new(1, -300, 0, 30),
+		Position = UDim2.fromOffset(212, 6),
+		Size = UDim2.new(1, -412, 0, 30),
 		TextXAlignment = Enum.TextXAlignment.Left,
 		TextTruncate = Enum.TextTruncate.AtEnd,
 	})
@@ -1084,7 +1095,7 @@ local function buildPanel()
 
 	footLabel = Ui.label(panel, "Foot", "", 16, {
 		Position = UDim2.fromOffset(PAD, FOOT_TOP),
-		Size = UDim2.new(1, -2 * PAD, 0, PANEL_HEIGHT - FOOT_TOP - 10),
+		Size = UDim2.new(1, -2 * PAD, 0, FOOT_HEIGHT),
 		TextColor3 = C.Dim,
 		TextWrapped = true,
 	})
