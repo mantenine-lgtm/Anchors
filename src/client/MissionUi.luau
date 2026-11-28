@@ -3,6 +3,14 @@
 -- 결과는 팀 전체 성공률만 보여 주고, 내 결과는 나에게만 보입니다.
 -- 승무원은 선실을 걸어다니다가, 미션이 뜨면 입력을 끝낼 때까지(또는 시간이 끝날 때까지) 그 자리에 멈춥니다
 -- (State.missionInput → CameraRig 가 걷기·점프를 잠금). 터치 기기는 그동안만 이동 스틱 대신 미션 버튼이 뜹니다.
+--
+-- 연타 미션(Config.Tap, Nick 11-28): 화면 양옆에 큰 '연타!' 버튼 두 개가 뜨고(양손 엄지용), 정해진 시간 동안 그 버튼이나
+-- 스페이스(방향키·WASD·게임패드 A 도 됨)를 빠르게 누릅니다. 내가 누르면 그 버튼이 눌려 들어가며 금빛 고리가 퍼지고
+-- (키보드는 왼쪽·오른쪽 버튼이 번갈아 눌림), 다른 사람이 누른 만큼(서버가 알리는 합계가 오른 만큼)은 두 버튼 위에
+-- 하늘색 작은 고리가 톡톡 터지며 버튼이 들썩입니다.
+-- 누른 횟수는 바로 화면에 올리고, 서버에는 모아서 SendInterval 초마다 누적 횟수만 보냅니다(원격 호출이 몰리지 않게).
+-- 아래 미션 판의 게이지는 로켓 전체 연타 합계의 단계(합계가 두 배가 될 때마다 1단계)이고, 단계가 높을수록 그 미션의 가속이 커집니다.
+-- 이펙트는 고리 Frame 몇 개를 돌려 쓰고 트윈 없이 매 프레임 크기만 바꿔서 폰에서도 가볍습니다.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
@@ -11,6 +19,7 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared:WaitForChild("Config"))
 local Fmt = require(Shared:WaitForChild("Fmt"))
 local Net = require(Shared:WaitForChild("Net"))
+local TapMission = require(Shared:WaitForChild("TapMission"))
 
 local State = require(script.Parent:WaitForChild("State"))
 local Ui = require(script.Parent:WaitForChild("Ui"))
@@ -48,6 +57,31 @@ type Mission = {
 	slots: { Frame },
 }
 
+-- 연타 미션 (내 화면)
+type Tap = {
+	id: number,
+	limit: number,
+	closeAt: number,
+	minTaps: number,
+	count: number, -- 내가 누른 횟수 (누르면 바로 늘어남)
+	sent: number, -- 서버에 마지막으로 보낸 누적 횟수
+	sentAt: number, -- 마지막으로 보낸 때 (os.clock)
+	finished: boolean, -- 시간이 끝남
+	shown: number, -- 화면에 보이는 로켓 전체 합계 (줄어들지 않음)
+	level: number, -- 화면에 보이는 단계 (정수)
+	others: number, -- 지금까지 본 다른 사람들의 횟수 (서버 합계 − 내가 보낸 횟수, 줄어들지 않음)
+}
+
+-- 연타 버튼 위에 퍼지는 고리 하나 (돌려 씀)
+type Ring = {
+	frame: Frame,
+	stroke: UIStroke,
+	born: number, -- 생긴 때 (os.clock)
+	life: number, -- 사라지기까지 초
+	from: number, -- 처음 지름 (버튼 지름에 대한 비율)
+	to: number, -- 마지막 지름
+}
+
 local root: Frame
 local panel: Frame
 local titleLabel: TextLabel
@@ -58,11 +92,47 @@ local resultLabel: TextLabel
 local ownLabel: TextLabel
 local padFrame: Frame
 local jumpButton: TextButton
+local tapBox: Frame
+local tapFill: Frame
+local tapGaugeStroke: UIStroke
+local tapTotalLabel: TextLabel
+local tapMineLabel: TextLabel
+local tapBoostLabel: TextLabel
+-- 연타 버튼 하나 (양옆에 두 개)
+type TapPad = {
+	button: TextButton,
+	scale: UIScale,
+	stroke: UIStroke,
+	word: TextLabel,
+	count: TextLabel,
+	hint: TextLabel,
+	rings: { Ring },
+	ringNext: number,
+	myDepth: number, -- 내가 누르면 1, 곧 0 으로 (버튼이 눌려 들어가고 금빛으로 번쩍)
+	otherDepth: number, -- 다른 사람이 누르면 OTHER_DEPTH, 곧 0 으로 (버튼이 살짝 들썩)
+	lastMyRing: number,
+}
+local tapPads: { TapPad } = {} -- 1 = 왼쪽(TapLeft), 2 = 오른쪽(TapRight)
+local keySide = 1 -- 키보드로 누르면 왼쪽·오른쪽 버튼이 번갈아 눌린 것으로 보여 줌
 
 local mission: Mission? = nil
+local tap: Tap? = nil
 local hideAt = 0 -- 이 시각(os.clock)이 지나면 판을 숨김
 local lastCombo = 0
 local usedTouch = false -- 화면을 한 번이라도 터치했는지
+local appear = 1 -- 버튼이 뜰 때 0 에서 1 로 (작게 시작해 커지며 나타남)
+local otherQueue = 0 -- 다른 사람이 누른 횟수 중 아직 이펙트로 안 보여 준 것
+local otherFrac = 0
+local tapFlash = 0 -- 단계가 오를 때 1, 곧 0 으로 (게이지 테두리가 번쩍)
+local lastTapSound = 0
+local lastLevelSound = 0
+local lastOtherRing = 0
+local TAP_SOUND_GAP = 0.08 -- 누르는 소리는 이 간격보다 자주 내지 않음
+local LEVEL_SOUND_GAP = 0.5
+local RING_COUNT = 7 -- 버튼마다 돌려 쓰는 고리 수
+local MY_RING_GAP = 0.03 -- 내 고리는 이 간격보다 자주 만들지 않음
+local OTHER_RING_GAP = 0.05 -- 다른 사람 고리는 1초에 20개까지 (나머지는 버튼 들썩임으로만)
+local OTHER_DEPTH = 0.55
 
 -- 화면 버튼(방향·점프)은 터치 기기에서만 보여 줌. 키보드가 있으면 화면을 가리지 않게 숨김.
 local function wantsPad(): boolean
@@ -78,6 +148,8 @@ end
 
 local SLOT = 80
 local GAP = 12
+local TAP_BUTTON = 200 -- 양옆 연타 버튼 지름 (기준 화면 픽셀)
+local TAP_BASE = Color3.fromRGB(44, 36, 16) -- 연타 버튼 바탕 (어두운 금색)
 
 local function slotColor(slot: Frame, color: Color3, mark: Color3)
 	slot.BackgroundColor3 = color
@@ -126,7 +198,146 @@ local function showPanel(seconds: number)
 	hideAt = os.clock() + seconds
 end
 
+-- ------------------------------------------------------------ 연타 미션
+local function tapPrompt(): string
+	if wantsPad() then
+		return "연타! 양옆 버튼을 다 같이 빠르게!"
+	end
+	return "연타! 스페이스나 양옆 버튼을 빠르게!"
+end
+
+-- 고리 하나를 띄움. mine 이면 버튼 둘레에서 크게 퍼지는 금빛 고리, 아니면 버튼 위 아무 데서나 톡 터지는 하늘색 작은 고리
+local function ring(pad: TapPad, mine: boolean)
+	local r = pad.rings[pad.ringNext]
+	if r == nil then
+		return
+	end
+	pad.ringNext = pad.ringNext % #pad.rings + 1
+	r.born = os.clock()
+	if mine then
+		r.frame.Position = UDim2.fromScale(0.5, 0.5)
+		r.life, r.from, r.to = 0.35, 1.0, 1.5
+		r.stroke.Color = C.Yellow
+		r.stroke.Thickness = 5
+	else
+		local angle = math.random() * math.pi * 2
+		local distance = math.random() * 0.32
+		r.frame.Position = UDim2.fromScale(0.5 + math.cos(angle) * distance, 0.5 + math.sin(angle) * distance)
+		r.life, r.from, r.to = 0.4, 0.16, 0.42
+		r.stroke.Color = C.Cyan
+		r.stroke.Thickness = 3
+	end
+	r.frame.Size = UDim2.fromScale(r.from, r.from)
+	r.stroke.Transparency = 0
+	r.frame.Visible = true
+end
+
+local function updateRings()
+	local clock = os.clock()
+	for _, pad in ipairs(tapPads) do
+		for _, r in ipairs(pad.rings) do
+			if r.frame.Visible then
+				local k = (clock - r.born) / r.life
+				if k >= 1 then
+					r.frame.Visible = false
+				else
+					local eased = 1 - (1 - k) * (1 - k)
+					local d = r.from + (r.to - r.from) * eased
+					r.frame.Size = UDim2.fromScale(d, d)
+					r.stroke.Transparency = k
+				end
+			end
+		end
+	end
+end
+
+-- 서버에 누적 횟수를 보냄 (바뀐 것이 있을 때만)
+local function sendTaps(t: Tap)
+	if t.count == t.sent then
+		return
+	end
+	t.sent = t.count
+	t.sentAt = os.clock()
+	Net.event("MissionInput"):FireServer(t.id, "tap", t.count)
+end
+
+-- 로켓 전체 합계: 서버가 알린 합계(내가 보낸 횟수까지 들어 있음) + 아직 안 보낸 내 횟수. 화면에서는 줄어들지 않게.
+-- 다른 사람들의 횟수(서버 합계 − 내가 보낸 횟수)가 오르면 그만큼을 '다른 사람 누름' 이펙트로 보여 줄 몫에 더함
+local function tapTotal(t: Tap): number
+	local server = if State.number("TapId") == t.id then State.number("TapTotal") else 0
+	local others = server - t.sent
+	if others > t.others then
+		otherQueue += others - t.others
+		t.others = others
+	end
+	t.shown = math.max(t.shown, server + (t.count - t.sent))
+	return t.shown
+end
+
+local function refreshTap(t: Tap)
+	local total = tapTotal(t)
+	local level = TapMission.level(total)
+	tapFill.Size = UDim2.fromScale(math.clamp(level / Config.Tap.MaxLevel, 0, 1), 1)
+	tapTotalLabel.Text = "합계 " .. Fmt.comma(total) .. "회"
+	tapBoostLabel.Text = string.format("%d단계 · 가속 ×%.2f", math.floor(level), TapMission.factor(total))
+	local mine = tostring(t.count)
+	for _, pad in ipairs(tapPads) do
+		pad.count.Text = mine
+	end
+	if t.count >= t.minTaps then
+		tapMineLabel.Text = string.format("나 %d회 ✓", t.count)
+		tapMineLabel.TextColor3 = C.Green
+	else
+		tapMineLabel.Text = string.format("나 %d/%d", t.count, t.minTaps)
+		tapMineLabel.TextColor3 = C.Text
+	end
+	local whole = math.floor(level)
+	if whole > t.level then
+		t.level = whole
+		tapFlash = 1
+		if os.clock() - lastLevelSound >= LEVEL_SOUND_GAP then
+			lastLevelSound = os.clock()
+			State.emit("Sound", "Combo")
+		end
+	end
+end
+
+-- side = 누른 버튼 (1 왼쪽, 2 오른쪽). 키보드면 nil 이고 두 버튼이 번갈아 눌린 것으로 보여 줌
+local function pressTap(side: number?)
+	local t = tap
+	if not t or t.finished or State.role() ~= "Crew" then
+		return
+	end
+	if State.now() > t.closeAt then
+		return
+	end
+	t.count += 1
+	local index = side
+	if index == nil then
+		index = keySide
+		keySide = 3 - keySide
+	end
+	local pad = tapPads[index]
+	local clock = os.clock()
+	if pad then
+		pad.myDepth = 1
+		if clock - pad.lastMyRing >= MY_RING_GAP then
+			pad.lastMyRing = clock
+			ring(pad, true)
+		end
+	end
+	if clock - lastTapSound >= TAP_SOUND_GAP then
+		lastTapSound = clock
+		State.emit("Sound", "Press")
+	end
+	refreshTap(t)
+end
+
 local function press(key: string)
+	if tap then
+		pressTap()
+		return
+	end
 	local m = mission
 	if not m or m.finished or State.role() ~= "Crew" then
 		return
@@ -161,13 +372,63 @@ local function press(key: string)
 	end
 end
 
+local function startTap(info: any)
+	if type(info.id) ~= "number" or type(info.limit) ~= "number" or type(info.closeAt) ~= "number" then
+		return
+	end
+	local t: Tap = {
+		id = info.id,
+		limit = info.limit,
+		closeAt = info.closeAt,
+		minTaps = if type(info.minTaps) == "number" then info.minTaps else Config.Tap.MinTaps,
+		count = 0,
+		sent = 0,
+		sentAt = os.clock(),
+		finished = false,
+		shown = 0,
+		level = 0,
+		others = 0,
+	}
+	tap = t
+	otherQueue = 0
+	otherFrac = 0
+	appear = 0
+	keySide = 1
+	for _, pad in ipairs(tapPads) do
+		pad.myDepth = 0
+		pad.otherDepth = 0
+		pad.hint.Text = if wantsPad() then "" else "또는 스페이스"
+	end
+	State.missionInput = true
+	titleLabel.Text = tapPrompt()
+	titleLabel.TextColor3 = C.Yellow
+	slotRow.Visible = false
+	tapBox.Visible = true
+	resultLabel.Visible = false
+	ownLabel.Visible = false
+	timerBack.Visible = true
+	tapFlash = 0
+	refreshTap(t)
+	showPanel(info.limit + 3)
+	State.emit("Sound", "Countdown")
+end
+
 local function onMissionStart(info: any)
-	if type(info) ~= "table" or type(info.sequence) ~= "table" then
+	if type(info) ~= "table" then
+		return
+	end
+	if info.kind ~= "tap" and type(info.sequence) ~= "table" then
 		return
 	end
 	lastCombo = State.number("Combo")
+	tap = nil
 	if State.role() ~= "Crew" then
 		mission = nil
+		return
+	end
+	if info.kind == "tap" then
+		mission = nil
+		startTap(info)
 		return
 	end
 	local sequence: { string } = {}
@@ -189,6 +450,7 @@ local function onMissionStart(info: any)
 	titleLabel.Text = promptText()
 	titleLabel.TextColor3 = C.Yellow
 	slotRow.Visible = true
+	tapBox.Visible = false
 	resultLabel.Visible = false
 	ownLabel.Visible = false
 	timerBack.Visible = true
@@ -202,8 +464,11 @@ local function onMissionResult(info: any)
 	end
 	local rate: number = info.rate
 	local combo: number = info.combo
+	local isTap = info.kind == "tap"
 	mission = nil
+	tap = nil
 	slotRow.Visible = false
+	tapBox.Visible = false
 	timerBack.Visible = false
 
 	local text = "팀 성공률 " .. Fmt.percent(rate)
@@ -215,18 +480,30 @@ local function onMissionResult(info: any)
 	elseif lastCombo > 0 then
 		text ..= " · 콤보 끊김"
 	end
-	titleLabel.Text = "미션 결과"
-	titleLabel.TextColor3 = C.Dim
-	resultLabel.Text = text
+	if isTap then
+		-- 연타 미션: 큰 줄은 로켓 전체 연타 합계와 가속 배율, 제목 줄에 팀 성공률·콤보
+		local total = if type(info.tapTotal) == "number" then info.tapTotal else 0
+		local factor = if type(info.tapFactor) == "number" then info.tapFactor else 1
+		local level = if type(info.tapLevel) == "number" then info.tapLevel else 0
+		titleLabel.Text = string.format("연타 %d단계 · %s", math.floor(level), text)
+		titleLabel.TextColor3 = C.Dim
+		resultLabel.Text = string.format("연타 %s회 · 가속 ×%.2f", Fmt.comma(total), factor)
+	else
+		titleLabel.Text = "미션 결과"
+		titleLabel.TextColor3 = C.Dim
+		resultLabel.Text = text
+	end
 	resultLabel.TextColor3 = if rate >= Config.Mission.ComboRule then C.Green else C.Orange
 	resultLabel.Visible = true
 
 	local own = info.own
+	local taps = if isTap and type(info.tapMine) == "number" then info.tapMine else nil
 	if own == "success" then
-		ownLabel.Text = "나: 성공"
+		ownLabel.Text = "나: 성공" .. (if taps then string.format(" · %d회", taps) else "")
 		ownLabel.TextColor3 = C.Green
 	elseif own == "fail" then
-		ownLabel.Text = "나: 실패"
+		-- 연타 미션은 몇 번 모자랐는지 (성공 기준 MinTaps)
+		ownLabel.Text = "나: 실패" .. (if taps then string.format(" · %d/%d회", taps, Config.Tap.MinTaps) else "")
 		ownLabel.TextColor3 = C.Red
 	elseif own == "excluded" then
 		ownLabel.Text = "입력이 없어 판정에서 빠졌습니다 (코인 절반)"
@@ -246,6 +523,72 @@ local function onMissionResult(info: any)
 	if rate >= Config.Mission.ComboRule then
 		State.emit("Sound", if combo >= 2 then "Combo" else "MissionSuccess")
 	end
+end
+
+-- 연타 버튼 하나: 둥글고 큼. 여러 손가락이 따로 눌러도 하나하나 세도록 버튼의 InputBegan(누를 때마다 따로 옴)을 씀.
+-- 글자·숫자·고리는 모두 버튼의 자식이라 누르는 것을 막지 않음
+local function buildTapPad(name: string, side: number, position: UDim2): TapPad
+	local button = Ui.button(root, name, "", 20, TAP_BASE, {
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = position,
+		Size = UDim2.fromOffset(TAP_BUTTON, TAP_BUTTON),
+		BackgroundTransparency = 0.08,
+		AutoButtonColor = false,
+		Visible = false,
+	})
+	Ui.make("UICorner", { CornerRadius = UDim.new(0.5, 0), Parent = button })
+	local stroke = Ui.stroke(button, C.Yellow, 4, 0)
+	local scale = Ui.make("UIScale", { Parent = button })
+	local word = Ui.label(button, "Word", "연타!", 44, {
+		Position = UDim2.fromScale(0, 0.2),
+		Size = UDim2.fromScale(1, 0.32),
+		TextColor3 = C.Yellow,
+		TextStrokeTransparency = 0.3,
+	})
+	local count = Ui.label(button, "Count", "0", 30, {
+		Position = UDim2.fromScale(0, 0.52),
+		Size = UDim2.fromScale(1, 0.2),
+	})
+	local hint = Ui.label(button, "Hint", "", 15, {
+		Position = UDim2.fromScale(0, 0.73),
+		Size = UDim2.fromScale(1, 0.1),
+		TextColor3 = C.Dim,
+	})
+	local pad: TapPad = {
+		button = button,
+		scale = scale,
+		stroke = stroke,
+		word = word,
+		count = count,
+		hint = hint,
+		rings = {},
+		ringNext = 1,
+		myDepth = 0,
+		otherDepth = 0,
+		lastMyRing = 0,
+	}
+	for i = 1, RING_COUNT do
+		local frame = Ui.frame(button, "Ring" .. i, {
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.fromScale(0.5, 0.5),
+			Size = UDim2.fromScale(1, 1),
+			ZIndex = 3,
+			Visible = false,
+		})
+		Ui.make("UICorner", { CornerRadius = UDim.new(0.5, 0), Parent = frame })
+		local ringStroke = Ui.stroke(frame, C.Yellow, 4, 0)
+		table.insert(pad.rings, { frame = frame, stroke = ringStroke, born = 0, life = 1, from = 1, to = 1 })
+	end
+	button.InputBegan:Connect(function(input: InputObject)
+		local kind = input.UserInputType
+		if kind == Enum.UserInputType.Touch or kind == Enum.UserInputType.MouseButton1 then
+			if kind == Enum.UserInputType.Touch then
+				usedTouch = true
+			end
+			pressTap(side)
+		end
+	end)
+	return pad
 end
 
 local function padButton(name: string, direction: string, position: UDim2)
@@ -303,6 +646,45 @@ function MissionUi.init()
 		Visible = false,
 	})
 
+	-- 연타 미션: 로켓 전체 합계의 단계 게이지(눈금 = 단계) + 합계·내 횟수·가속 배율
+	tapBox = Ui.frame(panel, "TapBox", {
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.new(0.5, 0, 0, 38),
+		Size = UDim2.new(1, -40, 0, 84),
+		Visible = false,
+	})
+	local gauge, gaugeFill = Ui.bar(tapBox, "TapGauge", C.Yellow, {
+		Position = UDim2.fromOffset(0, 0),
+		Size = UDim2.new(1, 0, 0, 26),
+	})
+	tapFill = gaugeFill
+	tapGaugeStroke = Ui.stroke(gauge, C.Yellow, 2, 0.4)
+	for level = 1, Config.Tap.MaxLevel - 1 do
+		Ui.frame(gauge, "Tick" .. level, {
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.fromScale(level / Config.Tap.MaxLevel, 0.5),
+			Size = UDim2.new(0, 2, 1, -6),
+			BackgroundColor3 = C.White,
+			BackgroundTransparency = 0.55,
+			ZIndex = 2,
+		})
+	end
+	tapTotalLabel = Ui.label(tapBox, "TapTotal", "", 30, {
+		Position = UDim2.fromOffset(0, 34),
+		Size = UDim2.new(0.42, 0, 0, 44),
+		TextXAlignment = Enum.TextXAlignment.Left,
+	})
+	tapMineLabel = Ui.label(tapBox, "TapMine", "", 22, {
+		Position = UDim2.new(0.42, 0, 0, 34),
+		Size = UDim2.new(0.22, 0, 0, 44),
+	})
+	tapBoostLabel = Ui.label(tapBox, "TapBoost", "", 22, {
+		Position = UDim2.new(0.64, 0, 0, 34),
+		Size = UDim2.new(0.36, 0, 0, 44),
+		TextXAlignment = Enum.TextXAlignment.Right,
+		TextColor3 = C.Cyan,
+	})
+
 	-- 방향 버튼 (왼쪽 아래)과 점프 버튼 (오른쪽 아래)
 	padFrame = Ui.frame(root, "Pad", {
 		AnchorPoint = Vector2.new(0, 1),
@@ -328,6 +710,11 @@ function MissionUi.init()
 		press("Jump")
 	end)
 
+	-- 연타 버튼 두 개: 양손 엄지 자리(이동 스틱 자리와 점프 버튼 자리). 위 끝이 502 라서 디버그 패널(아래 끝 501)·
+	-- 부스터 메뉴(왼쪽 가운데)와 겹치지 않고, 가운데 미션 판(340~940)과도 떨어져 있음
+	tapPads[1] = buildTapPad("TapLeft", 1, UDim2.new(0, 160, 1, -118))
+	tapPads[2] = buildTapPad("TapRight", 2, UDim2.new(1, -150, 1, -118))
+
 	UserInputService.InputBegan:Connect(function(input: InputObject)
 		if input.UserInputType == Enum.UserInputType.Touch then
 			usedTouch = true
@@ -343,9 +730,73 @@ function MissionUi.init()
 	State.on("Phase", function(phase: string)
 		if phase ~= "Flight" then
 			mission = nil
+			tap = nil
 			panel.Visible = false
 		end
 	end)
+end
+
+-- 다른 사람 누름: 서버 합계가 오른 만큼을 다음 ShowInterval 동안 고르게 나눠, 버튼을 들썩이고 작은 고리를 띄움
+local function updateOthers(dt: number)
+	if otherQueue <= 0 then
+		return
+	end
+	otherFrac += otherQueue * math.min(1, dt / Config.Tap.ShowInterval)
+	local n = math.min(math.floor(otherFrac), otherQueue)
+	if n <= 0 then
+		return
+	end
+	otherFrac -= n
+	otherQueue -= n
+	local pad = tapPads[math.random(1, #tapPads)]
+	if pad == nil then
+		return
+	end
+	pad.otherDepth = math.max(pad.otherDepth, OTHER_DEPTH)
+	local clock = os.clock()
+	if clock - lastOtherRing >= OTHER_RING_GAP then
+		lastOtherRing = clock
+		ring(pad, false)
+	end
+end
+
+-- 연타 미션 진행: 버튼 이펙트, 모아 둔 횟수를 SendInterval 초마다 보내고, 시간이 끝나면 남은 것을 마지막으로 보냄
+local function updateTap(dt: number)
+	local fade = math.exp(-dt * 16)
+	tapFlash = math.max(0, tapFlash - dt * 3)
+	appear = math.min(1, appear + dt / 0.2)
+	updateRings()
+	local t = tap
+	for _, pad in ipairs(tapPads) do
+		pad.myDepth *= fade
+		pad.otherDepth *= fade
+	end
+	if not t then
+		return
+	end
+	updateOthers(dt)
+	local pop = 1 - (1 - appear) ^ 3
+	for _, pad in ipairs(tapPads) do
+		local depth = math.max(pad.myDepth, pad.otherDepth)
+		pad.scale.Scale = (0.6 + 0.4 * pop) * (1 - 0.08 * depth)
+		local glow = TAP_BASE:Lerp(C.Cyan, 0.3 * pad.otherDepth)
+		pad.button.BackgroundColor3 = glow:Lerp(C.Yellow, 0.55 * pad.myDepth)
+		pad.word.TextColor3 = C.Yellow:Lerp(C.White, pad.myDepth)
+		pad.stroke.Thickness = 4 + 4 * math.max(pad.myDepth, pad.otherDepth * 0.6)
+	end
+	if not t.finished and State.now() > t.closeAt then
+		t.finished = true
+		sendTaps(t)
+		titleLabel.Text = "연타 끝! 판정을 기다립니다"
+		titleLabel.TextColor3 = C.Green
+	elseif not t.finished and os.clock() - t.sentAt >= Config.Tap.SendInterval then
+		sendTaps(t)
+	end
+	refreshTap(t)
+	tapGaugeStroke.Color = if tapFlash > 0 then C.White else C.Yellow
+	tapGaugeStroke.Thickness = 2 + 3 * tapFlash
+	tapGaugeStroke.Transparency = 0.4 * (1 - tapFlash)
+	tapFill.BackgroundColor3 = if t.level >= Config.Tap.MaxLevel then C.Green else C.Yellow
 end
 
 function MissionUi.update(_dt: number)
@@ -363,17 +814,30 @@ function MissionUi.update(_dt: number)
 			titleLabel.TextColor3 = C.Red
 		end
 	end
+	local t = tap
+	if t then
+		local left = t.closeAt - State.now()
+		timerFill.Size = UDim2.fromScale(math.clamp(left / t.limit, 0, 1), 1)
+		timerFill.BackgroundColor3 = if left < t.limit * 0.3 then C.Red else C.Yellow
+	end
+	updateTap(_dt)
 	if panel.Visible and (os.clock() > hideAt or not flying) then
 		panel.Visible = false
 		mission = nil
+		tap = nil
 	end
 
 	-- 내 입력을 받는 동안만 걷기를 잠그고(CameraRig) 화면 버튼을 보여 줌
-	local active = mission ~= nil and not (mission :: Mission).finished and flying and crew
-	State.missionInput = active
-	local showPad = active and wantsPad()
+	local directionActive = mission ~= nil and not (mission :: Mission).finished and flying and crew
+	local tapActive = tap ~= nil and not (tap :: Tap).finished and flying and crew
+	State.missionInput = directionActive or tapActive
+	local showPad = directionActive and wantsPad()
 	padFrame.Visible = showPad
 	jumpButton.Visible = showPad
+	-- 양옆 연타 버튼 (모든 기기. PC 는 마우스로도, 스페이스로도)
+	for _, pad in ipairs(tapPads) do
+		pad.button.Visible = tapActive
+	end
 end
 
 return MissionUi

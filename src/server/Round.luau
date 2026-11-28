@@ -17,6 +17,7 @@ local Parts = require(Shared:WaitForChild("Parts"))
 local Planets = require(Shared:WaitForChild("Planets"))
 local Route = require(Shared:WaitForChild("Route"))
 local Scoring = require(Shared:WaitForChild("Scoring"))
+local TapMission = require(Shared:WaitForChild("TapMission"))
 
 local Assembly = require(script.Parent.Assembly)
 local Bots = require(script.Parent.Bots)
@@ -53,6 +54,7 @@ type Member = {
 local rng = Random.new()
 local planetRng = Random.new() -- 행성 고르기 전용 (판 진행에 쓰는 rng 의 순서를 바꾸지 않게)
 local feverRng = Random.new() -- 부품 피버 뽑기 전용 (같은 까닭)
+local tapRng = Random.new() -- 연타 미션에서 봇이 누르는 빠르기 전용 (같은 까닭)
 local state: Folder
 local current: any = nil -- 진행 중인 판 (없으면 nil)
 local roundNumber = 0
@@ -68,6 +70,7 @@ local options = {
 	botSkill = Config.Bots.Skill,
 	gear = Config.Gear.Default,
 	fever = Fever.mode(Config.Fever.Default), -- 부품 피버 시험 방식 (보통 / 전부 피버 / 끄기)
+	tap = TapMission.mode(Config.Tap.Default), -- 연타 미션 시험 방식 (보통 / 전부 연타 / 끄기)
 }
 
 local function now(): number
@@ -186,6 +189,8 @@ local function resetFlightState()
 	state:SetAttribute("FeverCount", 0) -- 지금 피버 중인 부품 수 (로켓 전체)
 	state:SetAttribute("FeverParts", 0) -- 피버를 뽑은 부품 수 (로켓에 꽂힌 부품 전체)
 	state:SetAttribute("FeverBonus", 0) -- 부품 피버로 빨라진 비율 (0.13 = 속도 +13%)
+	state:SetAttribute("TapId", 0) -- 지금 진행 중인 연타 미션 번호 (없으면 0)
+	state:SetAttribute("TapTotal", 0) -- 그 연타 미션의 로켓 전체 연타 합계 (ShowInterval 초마다)
 end
 
 local function showOptions()
@@ -193,6 +198,7 @@ local function showOptions()
 	state:SetAttribute("OptBotSkill", options.botSkill)
 	state:SetAttribute("OptGear", options.gear)
 	state:SetAttribute("OptFever", options.fever)
+	state:SetAttribute("OptTap", options.tap)
 end
 
 -- 조립 화면에 쓸 값: 부품 종류별 합계와 이번 판 장비 이름.
@@ -327,7 +333,8 @@ local function refreshAssembly(round: any, force: boolean)
 	local totals = Parts.totals(Assembly.loadouts(session))
 	round.totals = totals
 	local rate = Config.Rewards.ExpectedRate
-	round.expectedKm = FlightSim.predict(totals, 0, rate, Fever.expected(rate, options.fever))
+	round.expectedTap = TapMission.expected(#round.crew, options.tap) -- 연타 미션 평균 배율 (승무원 × 한 사람 평균 횟수)
+	round.expectedKm = FlightSim.predict(totals, 0, rate, Fever.expected(rate, options.fever), round.expectedTap, options.tap)
 	state:SetAttribute("ExpectedKm", round.expectedKm)
 	showBuild(totals :: any, round.gearName)
 end
@@ -451,6 +458,7 @@ local function runBuild(joined: { Player }): any
 		lastItem = nil, -- 감사 버튼이 가리키는 마지막 부스터
 		goldenFromKm = nil, -- 황금 항로를 쓴 지점 (km)
 		missionCount = 0,
+		expectedTap = 1, -- 연타 미션 평균 배율 (refreshAssembly). 디버그 빨리 감기 때 건너뛴 연타 미션에 씀
 		rateSum = 0,
 		humanAttempts = 0,
 		humanSuccesses = 0,
@@ -534,12 +542,69 @@ local function updateCrisis(round: any)
 	end
 end
 
+-- index 번째 미션의 입력 시간(초): 연타 미션이면 Config.Tap.Seconds, 아니면 그 챕터의 방향 미션 시간
+local function missionLimit(index: number, chapter: number): number
+	if TapMission.isTap(index, options.tap) then
+		return Config.Tap.Seconds
+	end
+	return Missions.params(chapter).Limit
+end
+
+-- 연타 미션을 띄움. 봇은 방향 미션과 같은 확률로 성공하고, 성공하는 봇은 1초에 BotRateMin~Max 번,
+-- 실패하는 봇은 천천히 눌러 MinTaps 에 못 미침 (updateTap 이 시간에 맞춰 늘림)
+local function startTapMission(round: any, index: number, secondsLeft: number, chapter: number)
+	local T = Config.Tap
+	local t = now()
+	local mission = {
+		id = index,
+		kind = "tap",
+		limit = T.Seconds,
+		chapter = chapter,
+		startedAt = t,
+		closeAt = t + secondsLeft - Config.Mission.InputGrace,
+		done = {}, -- 봇 id -> 성공하는 봇인지 (사람은 판정 때 횟수로 정함)
+		touched = {}, -- 승무원 id -> 한 번이라도 눌렀는지
+		taps = {}, -- 승무원 id -> 누른 횟수 (사람은 클라이언트가 보낸 누적 횟수, 봇은 시간에 맞춰 늘림)
+		bots = {}, -- 봇 id -> { rate = 1초에 누르는 횟수, cap = 최대 횟수 }
+		total = 0, -- 로켓 전체 연타 합계
+		shownAt = -math.huge,
+	}
+	local botRate = Bots.rate(options.botSkill, chapter)
+	for _, member in ipairs(round.crew) do
+		if member.isBot then
+			local ok = rng:NextNumber() < botRate
+			mission.done[member.id] = ok
+			if ok then
+				local rate = T.BotRateMin + tapRng:NextNumber() * (T.BotRateMax - T.BotRateMin)
+				mission.bots[member.id] = { rate = rate, cap = math.max(T.MinTaps, math.floor(rate * T.Seconds)) }
+			else
+				mission.bots[member.id] = { rate = (T.MinTaps - 1) / T.Seconds * tapRng:NextNumber(), cap = T.MinTaps - 1 }
+			end
+		end
+	end
+	round.mission = mission
+	state:SetAttribute("TapTotal", 0)
+	state:SetAttribute("TapId", index)
+	Net.event("MissionStart"):FireAllClients({
+		id = index,
+		kind = "tap",
+		limit = T.Seconds,
+		closeAt = mission.closeAt,
+		minTaps = T.MinTaps,
+	})
+end
+
 -- 미션을 띄움. secondsLeft = 판정까지 남은 시간
 local function startMission(round: any, index: number, secondsLeft: number)
 	local chapter = Route.chapterIndex(round.sim.x)
+	if TapMission.isTap(index, options.tap) then
+		startTapMission(round, index, secondsLeft, chapter)
+		return
+	end
 	local params = Missions.params(chapter)
 	local mission = {
 		id = index,
+		kind = "direction",
 		sequence = Missions.generate(params.Inputs, pick),
 		limit = params.Limit,
 		chapter = chapter,
@@ -555,14 +620,44 @@ local function startMission(round: any, index: number, secondsLeft: number)
 	round.mission = mission
 	Net.event("MissionStart"):FireAllClients({
 		id = index,
+		kind = "direction",
 		sequence = mission.sequence,
 		limit = params.Limit,
 		closeAt = now() + secondsLeft - Config.Mission.InputGrace,
 	})
 end
 
--- 미션 판정. 팀 성공률(0~1)을 돌려줌.
-local function resolveMission(round: any, mission: any): number
+-- 연타 미션 진행 (비행 루프에서 매 프레임): 봇 횟수를 시간에 맞춰 늘리고, 합계를 ShowInterval 초마다 알림.
+-- final 이면 봇은 정한 최대 횟수까지 채우고 합계를 바로 알림 (판정 직전)
+local function updateTap(round: any, final: boolean)
+	local mission = round.mission
+	if mission == nil or mission.kind ~= "tap" then
+		return
+	end
+	local elapsed = math.clamp(now() - mission.startedAt, 0, mission.limit)
+	for id, plan in pairs(mission.bots) do
+		local count = if final then plan.cap else math.min(plan.cap, math.floor(plan.rate * elapsed))
+		local old = mission.taps[id] or 0
+		if count > old then
+			mission.taps[id] = count
+			mission.total += count - old
+		end
+	end
+	if final or now() - mission.shownAt >= Config.Tap.ShowInterval then
+		mission.shownAt = now()
+		if getNumber(state, "TapTotal") ~= mission.total then
+			state:SetAttribute("TapTotal", mission.total)
+		end
+	end
+end
+
+-- 미션 판정. 팀 성공률(0~1)과 그 미션의 가속 배율(연타 미션이면 연타 합계로, 아니면 1)을 돌려줌.
+-- 연타 미션은 사람마다 누른 횟수가 MinTaps 이상이면 성공 (봇은 띄울 때 정함)
+local function resolveMission(round: any, mission: any): (number, number)
+	local tap = mission.kind == "tap"
+	if tap then
+		updateTap(round, true)
+	end
 	local participants = 0
 	local successes = 0
 	for _, member: Member in ipairs(round.crew) do
@@ -571,6 +666,9 @@ local function resolveMission(round: any, mission: any): number
 			continue
 		end
 		local ok = mission.done[member.id] == true
+		if tap and not member.isBot then
+			ok = TapMission.success(mission.taps[member.id] or 0)
+		end
 		if not member.isBot then
 			if ok or mission.touched[member.id] then
 				member.noInput = 0
@@ -613,7 +711,12 @@ local function resolveMission(round: any, mission: any): number
 	local rate = if participants > 0 then successes / participants else 0
 	round.missionCount += 1
 	round.rateSum += rate
-	return rate
+	if tap then
+		mission.factor = TapMission.factor(mission.total)
+		state:SetAttribute("TapId", 0)
+		return rate, mission.factor
+	end
+	return rate, 1
 end
 
 -- 부품 피버 속도 배율을 로켓과 부스터 그림자 비행(그 부스터 하나만 안 쓴 비행)에 똑같이 넣고 화면에 알림.
@@ -666,7 +769,8 @@ local function hideFever(round: any)
 	state:SetAttribute("FeverBonus", 0)
 end
 
--- 결과는 팀 전체 수치만 알리고, 각자에게는 자기 결과만 따로 보냄 (부품 피버는 로켓 전체 수와 내 부품 수)
+-- 결과는 팀 전체 수치만 알리고, 각자에게는 자기 결과만 따로 보냄 (부품 피버는 로켓 전체 수와 내 부품 수).
+-- 연타 미션이면 로켓 전체 연타 합계·단계·가속 배율과 내 횟수도 (누가 몇 번 눌렀는지는 알리지 않음)
 local function broadcastMissionResult(round: any, mission: any, rate: number, feverMine: { [Member]: number })
 	local sim = round.sim
 	state:SetAttribute("Combo", sim.combo)
@@ -675,10 +779,12 @@ local function broadcastMissionResult(round: any, mission: any, rate: number, fe
 	local feverCount = getNumber(state, "FeverCount")
 	local feverParts = getNumber(state, "FeverParts")
 	local feverBonus = getNumber(state, "FeverBonus")
+	local tap = mission.kind == "tap"
 	for _, player in ipairs(Players:GetPlayers()) do
 		local member = round.byPlayer[player]
 		Net.event("MissionResult"):FireClient(player, {
 			id = mission.id,
+			kind = if tap then "tap" else "direction",
 			rate = rate,
 			combo = sim.combo,
 			perfect = rate >= 1 - 1e-9,
@@ -687,16 +793,21 @@ local function broadcastMissionResult(round: any, mission: any, rate: number, fe
 			feverParts = feverParts,
 			feverBonus = feverBonus,
 			feverMine = if member then feverMine[member] or 0 else 0,
+			tapTotal = if tap then mission.total else nil,
+			tapLevel = if tap then TapMission.level(mission.total) else nil,
+			tapFactor = if tap then mission.factor else nil,
+			tapMine = if tap and member then mission.taps[member.id] or 0 else nil,
 		})
 	end
 end
 
--- 부스터마다 '그 부스터 하나만 안 쓴' 비행을 같이 진행 (정산 때 부스터로 늘린 거리를 알기 위해)
-local function stepShadows(round: any, rate: number?)
+-- 부스터마다 '그 부스터 하나만 안 쓴' 비행을 같이 진행 (정산 때 부스터로 늘린 거리를 알기 위해).
+-- 연타 미션의 가속 배율도 똑같이 넣어야 부스터로 늘린 거리에 연타 몫이 섞이지 않음
+local function stepShadows(round: any, rate: number?, factor: number?)
 	for _, item in ipairs(round.items) do
 		local shadow = item.shadow
 		if shadow and not shadow.ended then
-			FlightSim.step(shadow, rate)
+			FlightSim.step(shadow, rate, factor)
 		end
 	end
 end
@@ -749,6 +860,7 @@ local function runFlight(round: any)
 			-- 디버그: 위기 구간 직전까지 빨리 감기. 그 사이 미션은 예상 성공률로 자동 처리합니다 (부품 피버는 끔).
 			round.fastForward = false
 			round.mission = nil
+			state:SetAttribute("TapId", 0)
 			hideFever(round)
 			applyFever(round, 1, 0, 0)
 			local steps = 0
@@ -760,18 +872,22 @@ local function runFlight(round: any)
 					break
 				end
 				local autoRate: number? = nil
+				local autoFactor: number? = nil
 				if sim.t >= resolveAt then
 					autoRate = Config.Rewards.ExpectedRate
+					if TapMission.isTap(missionIndex, options.tap) then
+						autoFactor = round.expectedTap -- 건너뛴 연타 미션은 평균 배율로
+					end
 					missionIndex += 1
 					resolveAt = Missions.resolveTime(missionIndex)
 				end
-				FlightSim.step(sim, autoRate)
-				stepShadows(round, autoRate)
+				FlightSim.step(sim, autoRate, autoFactor)
+				stepShadows(round, autoRate, autoFactor)
 				steps += 1
 			end
 			-- 다음 미션은 제한 시간을 온전히 주고 시작
-			local nextParams = Missions.params(Route.chapterIndex(sim.x))
-			resolveAt = math.max(resolveAt, sim.t + nextParams.Limit + Config.Mission.InputGrace)
+			local nextLimit = missionLimit(missionIndex, Route.chapterIndex(sim.x))
+			resolveAt = math.max(resolveAt, sim.t + nextLimit + Config.Mission.InputGrace)
 			accumulator = 0
 			lastSync = -1
 			lastEtaCheck = -1
@@ -781,28 +897,34 @@ local function runFlight(round: any)
 			accumulator -= dt
 			-- 미션은 판정 시각보다 (제한 시간 + 여유)만큼 먼저 띄움
 			if round.mission == nil then
-				local params = Missions.params(Route.chapterIndex(sim.x))
-				if sim.t >= resolveAt - params.Limit - Config.Mission.InputGrace then
+				local limit = missionLimit(missionIndex, Route.chapterIndex(sim.x))
+				if sim.t >= resolveAt - limit - Config.Mission.InputGrace then
 					startMission(round, missionIndex, resolveAt - sim.t)
 				end
 			end
 			local rate: number? = nil
+			local factor: number? = nil
 			local resolved: any = nil
 			local feverMine: { [Member]: number }? = nil
 			if sim.t >= resolveAt and round.mission ~= nil then
 				resolved = round.mission
-				rate = resolveMission(round, resolved)
+				local tapFactor
+				rate, tapFactor = resolveMission(round, resolved)
+				if resolved.kind == "tap" then
+					factor = tapFactor
+				end
 				feverMine = rollFever(round) -- 이 칸의 이동부터 새 피버 배율
 				round.mission = nil
 				missionIndex += 1
 				resolveAt = Missions.resolveTime(missionIndex)
 			end
-			FlightSim.step(sim, rate)
-			stepShadows(round, rate)
+			FlightSim.step(sim, rate, factor)
+			stepShadows(round, rate, factor)
 			if resolved ~= nil and rate ~= nil then
 				broadcastMissionResult(round, resolved, rate, feverMine or {})
 			end
 		end
+		updateTap(round, false)
 		if sim.t - lastEtaCheck >= Config.Crisis.CheckInterval then
 			lastEtaCheck = sim.t
 			updateCrisis(round)
@@ -819,6 +941,7 @@ local function runFlight(round: any)
 
 	round.ended = true
 	round.mission = nil
+	state:SetAttribute("TapId", 0)
 	syncFlight(round)
 	awardPartExp(round, true)
 	hideFever(round)
@@ -1259,6 +1382,20 @@ local function connectRemotes()
 		if mission == nil or member == nil or mission.id ~= missionId then
 			return
 		end
+		if mission.kind == "tap" then
+			-- 연타 미션: 누적 횟수를 SendInterval 초마다 받음. 줄어든 값·이상한 값은 무시하고, 너무 빠른 만큼은 잘라냄
+			if kind ~= "tap" then
+				return
+			end
+			local old = mission.taps[member.id] or 0
+			local value = TapMission.accept(old, inputs, now() - mission.startedAt)
+			if value > old then
+				mission.taps[member.id] = value
+				mission.total += value - old
+				mission.touched[member.id] = true
+			end
+			return
+		end
 		mission.touched[member.id] = true
 		if kind == "done" and mission.done[member.id] ~= true and Missions.check(mission.sequence, inputs) then
 			mission.done[member.id] = true
@@ -1414,6 +1551,12 @@ end
 -- 부품 피버 시험 방식 (보통 / 전부 피버 / 끄기). 다음 미션 판정부터
 function Round.setFever(id: string)
 	options.fever = Fever.mode(id)
+	showOptions()
+end
+
+-- 연타 미션 시험 방식 (보통 / 전부 연타 / 끄기). 다음에 띄우는 미션부터
+function Round.setTapMode(id: string)
+	options.tap = TapMission.mode(id)
 	showOptions()
 end
 

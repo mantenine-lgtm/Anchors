@@ -8,6 +8,7 @@ local Config = require(Shared:WaitForChild("Config"))
 local Fever = require(Shared:WaitForChild("Fever"))
 local Net = require(Shared:WaitForChild("Net"))
 local Planets = require(Shared:WaitForChild("Planets"))
+local TapMission = require(Shared:WaitForChild("TapMission"))
 
 local State = require(script.Parent:WaitForChild("State"))
 local Ui = require(script.Parent:WaitForChild("Ui"))
@@ -23,6 +24,7 @@ local skillButton: TextButton
 local crewButton: TextButton
 local gearButton: TextButton
 local feverButton: TextButton
+local tapButton: TextButton
 local planetButton: TextButton
 local open = false
 
@@ -71,12 +73,12 @@ function DebugPanel.init()
 	})
 	Ui.stroke(toggleButton, C.Purple, 2, 0)
 
-	local rows = 12
-	-- 줄 간격 28, 버튼 높이 25: 판의 아래 끝이 499 라서 비행 중 미션 점프 버튼(Key_Jump, 위 끝 510)을 덮지 않음
-	-- (부품 피버 줄을 더하며 30·27 에서 줄임). 발사장에서 보이는 엔진 기본 터치 점프 버튼은 화면 높이 500~720 픽셀인
-	-- 태블릿에서 위쪽이 조금 가려질 수 있음 (디버그 패널은 개발용이고 닫을 수 있어 그대로 둠)
-	local rowPitch = 28
-	local rowHeight = 25
+	local rows = 13
+	-- 줄 간격 26, 버튼 높이 23: 판의 아래 끝이 501 이라서 비행 중 미션 점프 버튼(Key_Jump, 위 끝 510)을 덮지 않음
+	-- (부품 피버 줄을 더하며 30·27 에서, 연타 미션 줄을 더하며 28·25 에서 줄임). 발사장에서 보이는 엔진 기본 터치 점프 버튼은
+	-- 화면 높이 500~720 픽셀인 태블릿에서 위쪽이 조금 가려질 수 있음 (디버그 패널은 개발용이고 닫을 수 있어 그대로 둠)
+	local rowPitch = 26
+	local rowHeight = 23
 	panel = Ui.panel(root, "DebugPanel", {
 		AnchorPoint = Vector2.new(1, 0),
 		Position = UDim2.new(1, -16, 0, 150),
@@ -130,6 +132,10 @@ function DebugPanel.init()
 		local nextMode = nextIn(Config.Fever.Modes, Fever.mode(State.text("OptFever")), "Id")
 		send("Fever", nextMode.Id)
 	end)
+	tapButton = add("DebugTap", "", function()
+		local nextMode = nextIn(Config.Tap.Modes, TapMission.mode(State.text("OptTap")), "Id")
+		send("TapMode", nextMode.Id)
+	end)
 	planetButton = add("DebugPlanet", "", function()
 		send("Planet")
 	end)
@@ -152,6 +158,7 @@ function DebugPanel.update(_dt: number)
 		crewButton.Text = string.format("승무원 수: %d명 (다음 판부터)", State.number("OptBotFill"))
 		gearButton.Text = "장비: " .. gearName(State.text("OptGear")) .. " (다음 판부터)"
 		feverButton.Text = "부품 피버: " .. Fever.modeName(State.text("OptFever"))
+		tapButton.Text = "연타 미션: " .. TapMission.modeName(State.text("OptTap"))
 		planetButton.Text = "행성 바꾸기 (지금: " .. Planets.get(State.text("Planet")).Name .. ")"
 	end
 end

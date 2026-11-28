@@ -5,6 +5,7 @@
 
 local Boosters = require(script.Parent.Boosters)
 local Config = require(script.Parent.Config)
+local TapMission = require(script.Parent.TapMission)
 
 local F = Config.Flight
 
@@ -149,8 +150,8 @@ function FlightSim.setFever(sim: Sim, multiplier: number)
 	sim.fever = if multiplier > 0 then multiplier else 1
 end
 
--- 미션 판정 반영. r = 팀 성공률(0~1)
-function FlightSim.applyMission(sim: Sim, r: number)
+-- 미션 판정 반영. r = 팀 성공률(0~1). factor = 그 미션의 가속 배율 (연타 미션이면 TapMission.factor, 안 주면 1)
+function FlightSim.applyMission(sim: Sim, r: number, factor: number?)
 	if r >= Config.Mission.ComboRule - 1e-9 then
 		sim.combo = math.min(sim.combo + 1, F.ComboMax)
 	else
@@ -158,11 +159,15 @@ function FlightSim.applyMission(sim: Sim, r: number)
 	end
 	local perfect = if r >= 1 - 1e-9 then F.PerfectMultiplier else 1
 	local resonance = if sim.t < sim.resonanceUntil then sim.resonanceMultiplier else 1
-	sim.boost += sim.stats.kick * r * (1 + sim.stats.step * sim.combo) * perfect * resonance
+	local gain = sim.stats.kick * r * (1 + sim.stats.step * sim.combo) * perfect * resonance
+	if factor ~= nil then
+		gain *= factor
+	end
+	sim.boost += gain
 end
 
--- 한 칸(Dt) 진행. 이 칸에서 미션이 판정되면 missionRate 에 팀 성공률을 넘깁니다.
-function FlightSim.step(sim: Sim, missionRate: number?)
+-- 한 칸(Dt) 진행. 이 칸에서 미션이 판정되면 missionRate 에 팀 성공률을, 연타 미션이면 missionFactor 에 가속 배율을 넘깁니다.
+function FlightSim.step(sim: Sim, missionRate: number?, missionFactor: number?)
 	if sim.ended then
 		return
 	end
@@ -170,7 +175,7 @@ function FlightSim.step(sim: Sim, missionRate: number?)
 	sim.vb *= math.exp(FlightSim.rate(sim) * dt)
 	sim.boost *= math.exp(-dt / F.BoostDecayTime)
 	if missionRate ~= nil then
-		FlightSim.applyMission(sim, missionRate)
+		FlightSim.applyMission(sim, missionRate, missionFactor)
 	end
 	local v = sim.vb * (1 + sim.boost) * turboFactor(sim) * sim.fever
 	sim.x += v * dt
@@ -251,15 +256,29 @@ end
 
 -- 미션 성공률이 계속 missionRate 라고 보고 처음부터 끝까지 계산. 거리(km)와 시간(초)을 돌려줌.
 -- fever 를 주면 첫 미션 판정부터 그 속도 배율로 봄 (부품 피버의 평균, Fever.expected). 안 주면 피버 없음.
-function FlightSim.predict(totals: Totals, captainBonus: number, missionRate: number, fever: number?): (number, number)
+-- tapFactor 를 주면 연타 미션(TapMission.isTap(번호, tapMode))의 가속에 그 배율을 곱함 (TapMission.expected). 안 주면 연타 없음.
+function FlightSim.predict(
+	totals: Totals,
+	captainBonus: number,
+	missionRate: number,
+	fever: number?,
+	tapFactor: number?,
+	tapMode: string?
+): (number, number)
 	local sim = FlightSim.new(totals, captainBonus)
 	local nextMission = Config.Mission.FirstAt
+	local index = 0
 	while not sim.ended and sim.t < Config.Phase.FlightMax do
 		if sim.t >= nextMission then
+			index += 1
 			if fever ~= nil then
 				FlightSim.setFever(sim, fever)
 			end
-			FlightSim.step(sim, missionRate)
+			local factor: number? = nil
+			if tapFactor ~= nil and TapMission.isTap(index, tapMode) then
+				factor = tapFactor
+			end
+			FlightSim.step(sim, missionRate, factor)
 			nextMission += Config.Mission.Interval
 		else
 			FlightSim.step(sim)
