@@ -11,10 +11,12 @@ Net.setupServer()
 
 local World = require(script.Parent.World)
 local Round = require(script.Parent.Round)
+local Lift = require(script.Parent.Lift)
 local DebugCommands = require(script.Parent.DebugCommands)
 
 World.build()
 Round.start()
+Lift.start() -- 발사탑 엘리베이터 (발사장에 있으면)
 DebugCommands.init()
 
 print("[ROFLY] 데모 1 서버 시작")

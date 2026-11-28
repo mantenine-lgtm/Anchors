@@ -24,16 +24,17 @@ ROFLY(로블록스FLY) 게임 저장소. [Rojo](https://rojo.space)로 VS Code�
 
 ## 외형 모델 (GPT가 만든 코드)
 
-로켓 겉면·발사장·행성 소품은 GPT 최신 모델이 새로 디자인한 'BREAKLINE'입니다. 디자인 문서는 `docs/exterior/DESIGN.md`(콘셉트 그림 `docs/exterior/concepts/`), 파트 수·치수는 `docs/exterior/NOTES.md`. 아래 모듈이 ▶ Play 때 파트로 만듭니다.
+로켓 겉면·발사장·행성 소품의 모양은 GPT 최신 모델이 쓴 모듈이 ▶ Play 때 파트로 만듭니다. 발사장과 행성 소품은 GPT가 새로 디자인한 'BREAKLINE'(발사장 LAST GATE·바이옴 6종)이고, 로켓은 그 전 모양(PR #18)을 씁니다. 디자인 문서는 `docs/exterior/DESIGN.md`(콘셉트 그림 `docs/exterior/concepts/`), 파트 수·치수는 `docs/exterior/NOTES.md`.
 
 | 파일 | 만드는 것 | 폰 사양 한도 |
 |---|---|---|
-| `src/server/RocketShell.luau` | 구조선 CITADEL 겉면 (12면 강철 선체·추진 리브·코·엔진 종) | 파트 180개, 열 빛(`Heat` 속성) 16개 |
-| `src/server/LaunchPad.luau` | 발사장 LAST GATE (발사대·두 교각 관문과 탑승 팔·정비 데크·운영동·광장 표시) | 파트 90개, 빛 2개 |
+| `src/server/RocketShell.luau` | 로켓 겉면 (선체·코·플랩·열 타일·엔진 종) | 파트 180개, 열 빛(`Heat` 속성) 16개 |
+| `src/server/LaunchPad.luau` | 발사장 LAST GATE (발사대·두 교각 관문과 탑승 팔·엘리베이터·정비 데크·운영동·광장 표시) | 파트 90개(엘리베이터 포함), 빛 2개 |
 | `src/client/PlanetProps.luau` | 행성 소품 11종·지형지물 8종 (행성마다 다른 바이옴 모양) | 소품 5개(평균 3.5), 지형지물 16개, 행성마다 500개 |
 
 - 모든 외형은 폰에서도 쉽게 돌아가야 합니다. 위 한도를 넘기지 않습니다.
 - 다른 코드가 이름으로 찾는 파트: `LowerHull`·`UpperHull`·`NoseTip`, `RimLight`·`ControlWindow`·`MastLamp`(안에 SpotLight)·`Mount`·`TowerArm`(연료 탱크를 만들면 `FuelTank`), 소품의 `Pool`·`Cap`·`Crystal`.
+- 발사탑 엘리베이터: 판을 기다리는 동안(참여 확인) 광장의 부르기 버튼이나 칸 안 버튼(가까이 가면 뜨는 E 키·화면 버튼)을 누르면 칸이 3초 만에 탑승 팔 높이로 올라가, 로켓 바로 옆까지 걸어갈 수 있습니다. 판이 시작되면 칸은 아래로 돌아가고, 비행·정산 동안은 숨깁니다. 움직임은 `src/server/Lift.luau`(설정 `Config.Lift`), 칸·버튼 모양은 `LaunchPad.luau`(이름 `LiftCar`·`LiftFloor`·`LiftButton`·`LiftCallBottom`·`LiftCallTop`, 칸 속성 `Rise`).
 - 모양을 바꿀 때는 손으로 고치지 않고 GPT에게 다시 맡깁니다.
 
 ## 처음 세팅 (맥, 1회)

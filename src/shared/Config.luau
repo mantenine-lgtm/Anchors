@@ -340,6 +340,14 @@ Config.World = {
 	StudsPerMeter = 3.57,
 }
 
+-- 발사탑 엘리베이터 (Lift.luau). 판을 기다리는 동안(참여 확인) 광장과 탑승 팔 사이를 오르내림.
+-- 칸 모양과 오르는 높이(칸의 속성 Rise, 약 119 스터드)는 LaunchPad.luau 가 정함
+Config.Lift = {
+	RideSeconds = 3, -- 한 번 오르거나 내려가는 시간 (출발·도착은 부드럽게)
+	ButtonDistance = 10, -- 버튼을 누를 수 있는 거리(스터드)
+	RiderHeight = 10, -- 칸 바닥 위로 이 높이 안에 캐릭터 중심이 있으면 태움 (뛰는 중이어도)
+}
+
 -- 소리. 나중에 바꾸려면 Id 만 고치면 됨
 -- ROFLY_ 로 표시한 소리(와 아래 엔진음)는 ElevenLabs 로 만들어(tools/sfx) Nick 의 계정으로 Roblox 에 올린 소리입니다.
 -- 이 게임에서만 쓰고, 소리 파일은 저장소에 올리지 않습니다 (ElevenLabs 약관). 크기를 같은 기준으로 맞춰 두었으므로

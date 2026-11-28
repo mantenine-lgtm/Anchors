@@ -26,7 +26,6 @@ local CLADDING = Color3.fromRGB(182, 184, 172)
 local TRAY = Color3.fromRGB(47, 53, 54)
 local ASPHALT = Color3.fromRGB(74, 81, 83)
 local GUIDE = Color3.fromRGB(214, 141, 78)
-local PALE = Color3.fromRGB(170, 180, 169)
 local RIM = Color3.fromRGB(142, 232, 217)
 local LAMP = Color3.fromRGB(255, 239, 201)
 
@@ -119,7 +118,7 @@ local function gateBrace(parent: Instance, frame: CFrame, a: Vector3, b: Vector3
 		CFrame.fromMatrix((start + finishPoint) / 2, normal, along:Cross(normal), along), CAP, METAL, false)
 end
 
-local function buildGantry(parent: Instance, opts: Opts)
+local function buildGantry(parent: Instance, opts: Opts): number
 	local x = math.max(87, opts.hullRadius + 42)
 	for _, side in ipairs({ -1, 1 }) do
 		local pier = pierFrame(x, side)
@@ -136,8 +135,6 @@ local function buildGantry(parent: Instance, opts: Opts)
 			CAP, CONCRETE, true)
 		block(parent, "PierShoulder", Vector3.new(18.5, 10, 14.4),
 			CFrame.new(pierX, 171, pierZ), ARMOR, METAL, true)
-		block(parent, "PierGuide", Vector3.new(1.25, 96, 0.26),
-			pier * CFrame.new(POST_OFFSET, 95, 3.68), STEEL, METAL, false)
 
 		local deckY, braceLow, braceHigh = 58, 58, 104
 		if side == -1 then
@@ -175,6 +172,60 @@ local function buildGantry(parent: Instance, opts: Opts)
 
 	block(parent, "LampBracket", Vector3.new(5, 2.5, 5.5), CFrame.new(x - 16.2, 37, 16.3), CAP, METAL, false)
 	lamp(parent, Vector3.new(x - 18, 36.6, 16.3), Vector3.new(31, 2, 30))
+	return outer
+end
+
+local function buildLift(pad: Model, armY: number, armEndX: number)
+	local size = 12
+	local floorTop, thickness = 0.5, 0.3
+	local landingTop = armY + 1
+	local shaftX = armEndX + 10
+	local carX = shaftX + size / 2
+	local landingEnd = shaftX - 0.32
+	local landingLength = landingEnd - armEndX
+	local landingX = (armEndX + landingEnd) / 2
+
+	block(pad, "LiftLanding", Vector3.new(landingLength, 2, 12.4),
+		CFrame.new(landingX, armY, 0), ARMOR, TREAD, true)
+	for _, side in ipairs({ -1, 1 }) do
+		block(pad, "LiftLandingGuard", Vector3.new(landingLength - 0.4, 2.5, 0.55),
+			CFrame.new(landingX, landingTop + 1.25, side * 5.85), STEEL, METAL, true)
+	end
+
+	-- The inner faces of the guides are 0.3 studs outside the swept box.
+	local guideTop = armY + 6
+	local guideX = shaftX - 0.96
+	for _, side in ipairs({ -1, 1 }) do
+		block(pad, "LiftGuide", Vector3.new(1.15, guideTop, 1),
+			CFrame.new(guideX, guideTop / 2, side * 6.8), CAP, METAL, true)
+	end
+	block(pad, "LiftCallBottom", Vector3.new(0.82, 0.85, 0.28),
+		CFrame.new(guideX, 3.65, 6.19), GUIDE, NEON, false)
+	block(pad, "LiftCallTop", Vector3.new(0.82, 0.85, 0.28),
+		CFrame.new(guideX, landingTop + 3.65, 6.19), GUIDE, NEON, false)
+
+	local car = Instance.new("Model")
+	car.Name = "LiftCar"
+	car:SetAttribute("Rise", landingTop - floorTop)
+	local floor = block(car, "LiftFloor", Vector3.new(size, thickness, size),
+		CFrame.new(carX, floorTop - thickness / 2, 0), ARMOR, TREAD, true)
+	car.PrimaryPart = floor
+
+	-- The -X end stays open for both the plaza and the landing.
+	local guardHeight = 2.65
+	local guardY = floorTop + guardHeight / 2
+	for _, side in ipairs({ -1, 1 }) do
+		block(car, "LiftGuard", Vector3.new(size, guardHeight, 0.4),
+			CFrame.new(carX, guardY, side * (size / 2 - 0.2)), STEEL, METAL, true)
+	end
+	local rear = shaftX + size
+	block(car, "LiftRearGuard", Vector3.new(0.4, guardHeight, size - 0.8),
+		CFrame.new(rear - 0.2, guardY, 0), STEEL, METAL, true)
+	block(car, "LiftConsole", Vector3.new(0.64, 4.05, 1.4),
+		CFrame.new(rear - 0.6, floorTop + 2.025, 3.65), CAP, METAL, true)
+	block(car, "LiftButton", Vector3.new(0.25, 0.86, 0.84),
+		CFrame.new(rear - 1.025, floorTop + 3.5, 3.65), GUIDE, NEON, false)
+	car.Parent = pad
 end
 
 local function buildOperations(parent: Instance)
@@ -199,8 +250,6 @@ local function buildOperations(parent: Instance)
 			site * CFrame.new(x, 4.62, 14.02), ARMOR, TREAD, false)
 		block(parent, "RimLight", Vector3.new(10.8, 0.93, 0.24),
 			site * CFrame.new(x, 6.35, 14.36), RIM, NEON, false)
-		block(parent, "BayThreshold", Vector3.new(12.7, 0.25, 2.6),
-			site * CFrame.new(x, 1.395, 15.0), GUIDE, METAL, false)
 	end
 	wedge(parent, "ShelfShoulder", Vector3.new(5.2, 8.2, 15),
 		site * CFrame.new(29.1, 4.12, -1.2) * CFrame.Angles(0, -math.pi / 2, 0), OPERATIONS, CONCRETE, true)
@@ -225,11 +274,9 @@ local function buildWayfinding(parent: Instance, opts: Opts)
 				block(parent, "LaneDash", Vector3.new(1.2, 0.08, length * 0.245),
 					CFrame.new(side * 10.9, 0.144, center), GUIDE, PAINT, false)
 			end
-			block(parent, "LaneThreshold", Vector3.new(5.0, 0.08, 0.65),
-				CFrame.new(side * 7.0, 0.144, z0 + 1.0), PALE, PAINT, false)
 		end
 	end
-	for _, angle in ipairs({ 47, 63, 83, 108, 133, 159, 185, 217, 245, 272, 299, 322 }) do
+	for _, angle in ipairs({ 51, 85, 127, 161, 197, 235, 275, 313 }) do
 		local frame = radialFrame(angle, opts.plazaRadius - 4.1)
 		block(parent, "RimLight", Vector3.new(5.9, 0.24, 1.7),
 			frame * CFrame.new(0, 0.113, 0), RIM, NEON, false)
@@ -238,7 +285,8 @@ end
 
 function LaunchPad.build(pad: Model, opts: Opts): ()
 	buildMount(pad, opts)
-	buildGantry(pad, opts)
+	local armEndX = buildGantry(pad, opts)
+	buildLift(pad, opts.armY, armEndX)
 	buildOperations(pad)
 	buildWayfinding(pad, opts)
 end
