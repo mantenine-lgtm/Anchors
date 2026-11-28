@@ -9,3 +9,14 @@ sourcemap.json
 
 # macOS
 .DS_Store
+
+# ElevenLabs 키 (`elevenlabs onboard` 가 만든 .env, 절대 올리지 않음)
+/.env
+/.env.local
+
+# 효과음 도구(tools/sfx)의 파이썬 캐시와 만든 소리 파일.
+# ElevenLabs 약관상 소리 파일만 따로 배포하면 안 되므로 공개 저장소에 올리지 않음 (Roblox 에셋 ID 로만 씀)
+__pycache__/
+*.mp3
+*.ogg
+*.wav

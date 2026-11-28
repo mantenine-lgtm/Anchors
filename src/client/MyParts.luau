@@ -3,6 +3,8 @@
 -- 막대가 쭉쭉 차고, 레벨이 오를 때마다 그 부품 자리에서 폭죽이 터지며 '+N Lv' 가 뜹니다 (그사이 여러 레벨이 오르면 한 번으로 묶음).
 -- 값은 서버 PartProgress 가 이 사람에게만 'PartProgress' 신호로 보냅니다. 시작할 때 한 번 달라고 요청합니다.
 -- 패널과 폭죽은 내 화면에만 있어서, 같은 벽을 봐도 사람마다 자기 부품이 보입니다.
+-- 부품 피버 (Nick 11-28): 비행 중 내 부품이 피버에 들어가면 그 칸에 금빛 테두리·별빛(FeverFx)과 '피버!' 딱지가 뜨고,
+-- 패널 앞에서 금빛 반짝이가 피어남 (다음 미션 판정까지).
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -16,6 +18,8 @@ local Leveling = require(Shared:WaitForChild("Leveling"))
 local Net = require(Shared:WaitForChild("Net"))
 
 local BuildUi = require(script.Parent:WaitForChild("BuildUi"))
+local FeverFx = require(script.Parent:WaitForChild("FeverFx"))
+local State = require(script.Parent:WaitForChild("State"))
 local Ui = require(script.Parent:WaitForChild("Ui"))
 
 local MyParts = {}
@@ -34,6 +38,9 @@ local POP_VOLUME = 0.15
 local POP_GAP = 0.45 -- 폭죽 소리 사이 최소 간격(초). 초반엔 비행 내내 레벨이 오르므로 시끄럽지 않게
 local BIG_QUIET = 1.5 -- 이만큼(초) 안 오르다 오르면 크게 터뜨림 (갈수록 레벨업이 드물어져 한 번 한 번이 큼)
 local RETRY = 5 -- 값을 못 받으면 이 간격(초)으로 다시 요청
+local FEVER_CHECK = 0.1 -- 내 부품 피버를 다시 읽는 간격(초)
+local FEVER_RATE = 8 -- 피버 중인 내 부품 하나에서 피어나는 반짝이 수(초당). 6개 모두여도 한꺼번에 60개쯤 (휴대폰 사양)
+local FEVER_POP = 14 -- 피버에 들어가는 순간 한 번에 터지는 반짝이 수
 
 type Column = {
 	typeId: string,
@@ -46,6 +53,10 @@ type Column = {
 	up: TextLabel,
 	sparks: ParticleEmitter?,
 	glow: ParticleEmitter?,
+	fever: FeverFx.Glints,
+	feverBadge: TextLabel,
+	feverSparkles: ParticleEmitter?,
+	feverOn: boolean,
 	lv: number,
 	rarity: number,
 	expValue: number,
@@ -64,6 +75,7 @@ local nextRequest = 0
 local pops: { Sound } = {}
 local popIndex = 0
 local lastPop = -math.huge
+local lastFeverCheck = 0
 
 -- ------------------------------------------------------------ 폭죽
 local function makeFx(board: BasePart, column: Column, index: number, count: number)
@@ -114,9 +126,33 @@ local function makeFx(board: BasePart, column: Column, index: number, count: num
 	glow.LightInfluence = 0
 	glow.ZOffset = 0.5
 	glow.Parent = attachment
+	-- 부품 피버 반짝이: 피버 동안 패널 앞으로 천천히 피어남 (기본 그림이 반짝이라 Texture 는 그대로)
+	local fever = Instance.new("ParticleEmitter")
+	fever.Name = "FeverSparkles"
+	fever.Enabled = true
+	fever.Rate = 0
+	fever.EmissionDirection = Enum.NormalId.Front
+	fever.SpreadAngle = Vector2.new(70, 50)
+	fever.Speed = NumberRange.new(1.5, 4)
+	fever.Drag = 1
+	fever.Acceleration = Vector3.new(0, 1.5, 0)
+	fever.Lifetime = NumberRange.new(0.7, 1.3)
+	fever.Size = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0),
+		NumberSequenceKeypoint.new(0.25, 0.75),
+		NumberSequenceKeypoint.new(1, 0),
+	})
+	fever.Color = ColorSequence.new(C.White, FeverFx.Gold)
+	fever.LightEmission = 1
+	fever.LightInfluence = 0
+	fever.Rotation = NumberRange.new(0, 360)
+	fever.RotSpeed = NumberRange.new(-90, 90)
+	fever.ZOffset = 1
+	fever.Parent = attachment
 	attachment.Parent = board
 	column.sparks = sparks
 	column.glow = glow
+	column.feverSparkles = fever
 end
 
 local function popSound(big: boolean)
@@ -303,6 +339,19 @@ local function build(board: BasePart)
 			TextStrokeTransparency = 1,
 			ZIndex = 3,
 		})
+		-- 피버 딱지: 칸 위 테두리에 걸친 금빛 띠
+		local badge = Ui.label(frame, "FeverBadge", "피버!", 26, {
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.new(0.5, 0, 0, 6),
+			Size = UDim2.fromOffset(96, 32),
+			BackgroundColor3 = FeverFx.Gold,
+			BackgroundTransparency = 0,
+			TextColor3 = Color3.fromRGB(40, 26, 0),
+			TextStrokeTransparency = 1,
+			Visible = false,
+			ZIndex = 4,
+		})
+		Ui.corner(badge, 10)
 		local column: Column = {
 			typeId = info.Id,
 			frame = frame,
@@ -314,6 +363,10 @@ local function build(board: BasePart)
 			up = up,
 			sparks = nil,
 			glow = nil,
+			fever = FeverFx.glints(frame, 4, 0.26, 6, 4, true), -- 6칸뿐이라 한도 없이 늘 반짝임
+			feverBadge = badge,
+			feverSparkles = nil,
+			feverOn = false,
 			lv = 1,
 			rarity = 1,
 			expValue = 0,
@@ -357,6 +410,26 @@ function MyParts.init()
 	end)
 end
 
+-- 내 부품 피버를 서버 값(Grid/<종류>의 F<좌석>)에 맞춤. 비행 중 승무원일 때만
+local function updateFever()
+	local seat = if State.role() == "Crew" and State.phase() == "Flight" then State.myNumber("Seat") else 0
+	for _, column in ipairs(columns) do
+		local on = seat > 0 and FeverFx.isOn(column.typeId, seat)
+		if on ~= column.feverOn then
+			column.feverOn = on
+			FeverFx.show(column.fever, on)
+			column.feverBadge.Visible = on
+			local emitter = column.feverSparkles
+			if emitter then
+				emitter.Rate = if on then FEVER_RATE else 0
+				if on then
+					emitter:Emit(FEVER_POP)
+				end
+			end
+		end
+	end
+end
+
 function MyParts.update(dt: number)
 	if not received and os.clock() >= nextRequest then
 		nextRequest = os.clock() + RETRY
@@ -364,6 +437,10 @@ function MyParts.update(dt: number)
 	end
 	if not gui then
 		return
+	end
+	if os.clock() - lastFeverCheck >= FEVER_CHECK then
+		lastFeverCheck = os.clock()
+		updateFever()
 	end
 	local step = BAR_SPEED * dt
 	for _, column in ipairs(columns) do

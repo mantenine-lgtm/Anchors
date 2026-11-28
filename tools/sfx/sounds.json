@@ -1,0 +1,29 @@
+{
+  "about": "ROFLY 효과음을 ElevenLabs Sound Effects 로 만들 때 쓰는 문구 (generate.py 가 읽음). Nick(11-28): 용량이 커지면 안 되고, 흥미나 현장감에 꼭 필요한 소리만 만든다. 그래서 짧게 만들고 다듬을 때 모노로 줄이며, 엔진음은 반복 소리 하나를 굉음·웅웅 두 겹이 높이를 달리해 같이 씀. config 는 코드에서 이 소리를 쓰는 자리, use 는 들리는 때.",
+  "model": "eleven_text_to_sound_v3",
+  "fallbackModel": "eleven_text_to_sound_v2",
+  "outputFormat": "mp3_44100_128",
+  "creditsPerSecond": 10,
+  "variants": 3,
+  "influence": [0.35, 0.55, 0.75],
+  "sounds": [
+    {"name": "Engine", "config": "Config.EngineSound.Roar, Config.EngineSound.Hum", "use": "비행 내내 엔진음 (반복, 추력만큼 커짐)", "loop": true, "smallSpeaker": true, "duration": 8,
+     "prompt": "Powerful rocket engine thrust heard from inside the spaceship cabin, deep rumbling roar with soft crackle, steady and continuous"},
+    {"name": "EngineLoud", "config": "Engine 의 다른 안 (고르면 Engine 자리에 씀)", "use": "비행 내내 엔진음, 노트북·폰 스피커에서도 잘 들리게 중음을 살린 안", "loop": true, "smallSpeaker": true, "duration": 8,
+     "prompt": "Loud roaring rocket thruster blast, crackling exhaust with airy hiss over the rumble, steady and continuous"},
+    {"name": "Launch", "config": "Config.Sounds.Launch", "use": "발사 순간", "duration": 3,
+     "prompt": "Rocket engine ignition and liftoff, explosive blast and whoosh rising into a powerful roar, punchy cartoon game sound effect"},
+    {"name": "Caught", "config": "Config.Sounds.Caught", "use": "충격파에 잡혀 비행이 끝날 때", "duration": 2.5,
+     "prompt": "Huge explosion shockwave slamming into a spaceship, deep boom with metal debris, cinematic game sound"},
+    {"name": "Countdown", "config": "Config.Sounds.Countdown", "use": "카운트다운 마지막 5초 매초, 미션 시작", "duration": 0.5, "maxLength": 0.3,
+     "prompt": "Single short digital countdown beep, clean bright tone, game interface"},
+    {"name": "MissionSuccess", "config": "Config.Sounds.MissionSuccess", "use": "미션 성공, 정산 화면", "duration": 1.2,
+     "prompt": "Bright cheerful success chime, short sparkling arcade reward jingle, game interface"},
+    {"name": "Combo", "config": "Config.Sounds.Combo", "use": "미션 콤보 (2연속 이상 성공)", "duration": 1.2,
+     "prompt": "Energetic ascending combo chime with a punchy hit and sparkle, arcade power up, game interface"},
+    {"name": "ItemUse", "config": "Config.Sounds.ItemUse", "use": "부스터를 쓸 때", "duration": 1.2,
+     "prompt": "Sci-fi power up activation, energy charging whoosh with bright shimmer, game booster sound"},
+    {"name": "Coin", "config": "Config.CoinFx.SoundId", "use": "비행 중 코인이 들어올 때 (빠르게 여러 번)", "duration": 0.5, "maxLength": 0.35,
+     "prompt": "Single bright coin pickup ting, short sparkling metallic chime, game coin collect"}
+  ]
+}

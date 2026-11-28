@@ -80,6 +80,25 @@ Config.Mission = {
 	ResultShowSeconds = 1.6,
 }
 
+-- 부품 피버타임 (Nick 11-28, 수치는 임시): 방향 미션이 판정될 때마다 로켓에 꽂힌 부품 하나하나가 따로 무작위로
+-- 피버에 들어가고, 다음 미션 판정까지 이어집니다 (그때 다시 뽑음). 피버 중인 부품은 둘레에 반짝임이 뜹니다.
+-- 부품 주인이 그 미션에 성공했으면 SuccessChance, 아니면(실패·자리 비움·나감) FailChance.
+-- 피버 동안 로켓 속도 × (1 + SpeedBonus × 피버 부품 수 / 꽂힌 부품 수): 전부 피버면 +50%.
+-- 봇 10명 보통 실력이면 평균 28%가 피버(속도 +14%), 시뮬레이션 200판 평균 거리 +15% (20.2 → 23.3 km).
+-- 조립 화면의 예상 거리도 이 평균을 넣어 계산합니다 (Fever.expected).
+Config.Fever = {
+	SuccessChance = 0.3,
+	FailChance = 0.1,
+	SpeedBonus = 0.5,
+	-- 디버그 패널에서 바꾸는 시험 방식. 전부 피버 = 미션마다 모든 부품이 피버 (반짝임·휴대폰 성능 확인용)
+	Default = "normal",
+	Modes = {
+		{ Id = "normal", Name = "보통" },
+		{ Id = "all", Name = "전부 피버" },
+		{ Id = "off", Name = "끄기" },
+	},
+}
+
 -- 선장 발사 버튼
 Config.Captain = {
 	PerfectWindow = 0.12, -- 0초와의 차이가 이 안이면 완벽
@@ -321,21 +340,72 @@ Config.World = {
 	StudsPerMeter = 3.57,
 }
 
--- 소리 (임시: Roblox 기본 내장 소리. 나중에 크리에이터 스토어 소리로 교체)
+-- 소리. 나중에 바꾸려면 Id 만 고치면 됨
+-- ROFLY_ 로 표시한 소리(와 아래 엔진음)는 ElevenLabs 로 만들어(tools/sfx) Nick 의 계정으로 Roblox 에 올린 소리입니다.
+-- 이 게임에서만 쓰고, 소리 파일은 저장소에 올리지 않습니다 (ElevenLabs 약관). 크기를 같은 기준으로 맞춰 두었으므로
+-- 소리끼리의 크기 균형은 Volume 만으로 정합니다 (자주 나는 소리는 작게, 발사·충격파처럼 가끔 오는 큰 순간은 크게).
+-- 나머지는 Roblox 가 예전 기본 소리 파일을 공개 에셋으로 올려 둔 것(크리에이터 스토어, 만든 이 @Roblox,
+-- 설명이 \sounds\<파일 이름>)입니다. 기본 내장 소리 파일(rbxasset://sounds/...)은 지금 설치본에 11개만 남아 있어
+-- (2026-11 맥 Studio 설치 폴더 content/sounds 에서 확인: action_falling.ogg, impact_explosion_03.mp3 등)
+-- 예전 경로(Rocket shot.wav, victory.wav 등)로는 소리가 나지 않습니다.
 Config.Sounds = {
-	Countdown = { Id = "rbxasset://sounds/electronicpingshort.wav", Volume = 0.6 },
-	Launch = { Id = "rbxasset://sounds/Rocket shot.wav", Volume = 0.9 },
-	MissionSuccess = { Id = "rbxasset://sounds/victory.wav", Volume = 0.35 },
-	Combo = { Id = "rbxasset://sounds/bass.wav", Volume = 0.6 },
-	CrisisAlarm = { Id = "rbxasset://sounds/electronicpingshort.wav", Volume = 0.8 },
-	ItemUse = { Id = "rbxasset://sounds/Rocket whoosh 01.wav", Volume = 0.9 },
-	Press = { Id = "rbxasset://sounds/clickfast.wav", Volume = 0.5 },
-	Wrong = { Id = "rbxasset://sounds/uuhhh.mp3", Volume = 0.25 },
-	Caught = { Id = "rbxasset://sounds/impact_explosion_03.mp3", Volume = 0.9 },
-	Thunder = { Id = "rbxasset://sounds/HalloweenThunder.wav", Volume = 0.25 },
-	Thanks = { Id = "rbxasset://sounds/switch.wav", Volume = 0.5 },
-	PartPlace = { Id = "rbxasset://sounds/clickfast.wav", Volume = 0.8 }, -- 내 부품을 꽂음
-	LaunchAlert = { Id = "rbxasset://sounds/electronicpingshort.wav", Volume = 1 }, -- 선장 발사 임박 (세 번 연달아 울림)
+	Countdown = { Id = "rbxassetid://118533434533356", Volume = 0.6 }, -- ROFLY_Countdown: 짧고 맑은 전자음 삑
+	Launch = { Id = "rbxassetid://113747078016963", Volume = 0.9 }, -- ROFLY_Launch: 점화 폭발음이 굉음으로 올라감
+	MissionSuccess = { Id = "rbxassetid://130117785829325", Volume = 0.5 }, -- ROFLY_MissionSuccess: 짧고 밝은 성공 차임
+	Combo = { Id = "rbxassetid://135098826380564", Volume = 0.6 }, -- ROFLY_Combo: 올라가는 콤보 차임
+	CrisisAlarm = { Id = "rbxassetid://12221990", Volume = 0.8 }, -- electronicpingshort.wav
+	ItemUse = { Id = "rbxassetid://121597781056017", Volume = 0.8 }, -- ROFLY_ItemUse: 에너지가 차오르는 부스터 소리
+	Press = { Id = "rbxassetid://12221976", Volume = 0.5 }, -- clickfast.wav
+	Wrong = { Id = "rbxassetid://12222242", Volume = 0.25 }, -- uuhhh.wav
+	Caught = { Id = "rbxassetid://140326844031753", Volume = 0.9 }, -- ROFLY_Caught: 충격파가 덮치는 큰 폭발음
+	Thunder = { Id = "rbxassetid://12222030", Volume = 0.25 }, -- HalloweenThunder.wav
+	Thanks = { Id = "rbxassetid://12222170", Volume = 0.5 }, -- switch.wav
+	PartPlace = { Id = "rbxassetid://12221976", Volume = 0.8 }, -- clickfast.wav. 내 부품을 꽂음
+	LaunchAlert = { Id = "rbxassetid://12221990", Volume = 1 }, -- electronicpingshort.wav. 선장 발사 임박 (세 번 연달아 울림)
+}
+
+-- 엔진음: 비행 내내 반복해서 깔리는 소리 세 겹. 계산은 EngineMix.luau, 소리 내기는 클라이언트 Sfx.luau.
+-- 굉음은 비행 구간(최대 출력·구원 연료 > 순항 > 솔라 세일 > 관성)의 추력만큼 커지고, 웅웅 소리는 추력이 없어도
+-- 조금은 늘 남아서 비행 중에는 엔진 소리가 끊기지 않습니다. 바람 소리는 대기권 안에서 빠를수록 커집니다.
+-- 엔진 소리는 ElevenLabs 로 만든 7.6초 반복 소리(ROFLY_Engine, 선실 안에서 듣는 로켓 엔진)입니다. 노트북·폰 스피커에서도
+-- 들리도록 저음의 배음을 중음에 더해 두었습니다(tools/sfx/process.py 의 smallSpeaker).
+-- 크기(Volume)는 게임 안에서 들어 보지 않고 잡은 값입니다. 크거나 작으면 이 표의 Volume 만 고치면 됩니다.
+Config.EngineSound = {
+	-- 엔진 소리 하나를 굉음·웅웅 두 겹이 같이 씀 (용량을 줄이려고). 웅웅 소리는 Pitch 배로 낮게,
+	-- 소리 길이의 Offset 비율만큼 어긋난 자리부터 틀어서 굉음과 다른 겹으로 들림
+	Roar = { Id = "rbxassetid://139640557468504", Volume = 0.6 },
+	Hum = { Id = "rbxassetid://139640557468504", Volume = 0.4, Pitch = 0.75, Offset = 0.5 },
+	-- 기본 내장 낙하 바람 소리 (설치본에 있음)
+	Wind = { Id = "rbxasset://sounds/action_falling.ogg", Volume = 0.35 },
+	-- 엔진 소리 에셋을 못 불러오면 대신 쓰는 기본 내장 소리. FallbackPitch 배로 낮춰 굉음처럼 들리게 함
+	Fallback = "rbxasset://sounds/action_falling.ogg",
+	FallbackPitch = 0.45,
+	-- 비행 구간(FlightSim.phaseAt)별 추력 (0~1). 굉음 크기 비율이 됨
+	Thrust = { rescue = 1, hot = 1, cruise = 0.6, sail = 0.25, coast = 0.1 },
+	HumFloor = 0.4, -- 추력이 0이어도 남는 웅웅 소리 비율 (추력 1이면 1)
+	TurboThrust = 0.35, -- 터보 엔진이 켜져 있는 동안 추력에 더함 (굉음이 더 커짐)
+	TurboPitch = 0.1, -- 터보 엔진이 켜져 있는 동안 높이 +
+	RoarPitchLow = 0.8, -- 추력 0일 때 굉음 높이 (추력 1이면 1)
+	HumPitchLow = 0.75, -- 추력 0일 때 웅웅 소리 높이
+	SpeedPitch = 0.12, -- 빠를수록 높이 + (10 m/s 에서 1만 m/s 까지 로그로 0~이 값)
+	SpoolPitch = 0.6, -- 발사 순간의 높이. SpoolSeconds 동안 1까지 오름 (엔진이 힘을 받는 소리)
+	SpoolSeconds = 1.5,
+	LaunchSurge = 0.4, -- 발사 직후 크기 +40%, SurgeSeconds 동안 줄어듦
+	SurgeSeconds = 4,
+	PreIgniteSeconds = 3, -- 카운트다운 마지막 이 초 동안 웅웅 소리가 낮게 차오름 (0 이면 끔)
+	PreIgniteLevel = 0.5,
+	KickVolume = 0.3, -- 미션 성공·부스터를 쓴 순간 굉음 크기 +
+	KickPitch = 0.08, -- 그때 높이 +
+	KickSeconds = 1.5, -- 그 효과가 사라지는 시간(초)
+	WindStartSpeed = 20, -- 바람 소리가 나기 시작하는 속도 (m/s)
+	WindFullSpeed = 300, -- 바람 소리가 가장 큰 속도 (m/s)
+	WindPitchLow = 0.8,
+	WindPitchHigh = 1.3,
+	Attack = 6, -- 커질 때 따라가는 빠르기 (초당)
+	Release = 2.5, -- 작아질 때 따라가는 빠르기
+	CaughtRelease = 10, -- 충격파에 잡혔을 때 엔진이 끊기는 빠르기
+	PitchRate = 3, -- 높이가 따라가는 빠르기
+	MaxLevel = 1.6, -- 크기 비율 상한
 }
 
 -- 디버그 패널을 쓸 수 있는 사람
