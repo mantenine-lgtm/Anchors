@@ -27,8 +27,8 @@ ROFLY(로블록스FLY) 게임 저장소. [Rojo](https://rojo.space)로 VS Code�
 
 | 파일 | 만드는 것 | 폰 사양 한도 |
 |---|---|---|
-| `src/server/RocketShell.luau` | 구조선 CITADEL 겉면 (하부 장갑·선실 테두리·코·엔진 종) | 파트 180개, 열 빛(`Heat` 속성) 16개 |
-| `src/server/LaunchPad.luau` | 발사장 LAST GATE (발사대·발사탑 관문과 탑승 팔·운영동·광장 표시) | 파트 90개, 빛 2개 |
+| `src/server/RocketShell.luau` | 구조선 CITADEL 겉면 (12면 강철 선체·추진 리브·코·엔진 종) | 파트 180개, 열 빛(`Heat` 속성) 16개 |
+| `src/server/LaunchPad.luau` | 발사장 LAST GATE (발사대·두 교각 관문과 탑승 팔·정비 데크·운영동·광장 표시) | 파트 90개, 빛 2개 |
 | `src/client/PlanetProps.luau` | 행성 소품 11종·지형지물 8종 (행성마다 다른 바이옴 모양) | 소품 5개(평균 3.5), 지형지물 16개, 행성마다 500개 |
 
 - 모든 외형은 폰에서도 쉽게 돌아가야 합니다. 위 한도를 넘기지 않습니다.

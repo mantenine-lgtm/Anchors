@@ -105,6 +105,50 @@ local function cliff(parent: Instance, name: string, base: CFrame, a: Vector3, b
 	triangle(parent, name, aw, cw, dw, depth, color, material)
 end
 
+-- These four points are a tapered slope, with parallel upper and lower edges.
+local function calderaFace(parent: Instance, base: CFrame, a: Vector3, b: Vector3, c: Vector3, d: Vector3,
+	depth: number, color: Color3)
+	local right = (b - a).Unit
+	local bottom = (a + b) / 2
+	local top = (c + d) / 2
+	local rise = (top - bottom).Magnitude
+	local up = (top - bottom).Unit
+	local normal = right:Cross(up)
+	local frame = base * CFrame.fromMatrix((bottom + top) / 2 - normal * depth / 2, right, up, normal)
+	local width = (c - d).Magnitude
+	local shoulder = ((b - a).Magnitude - width) / 2
+	box(parent, "CalderaSlope", frame, Vector3.new(width, rise, depth), color, BASALT, true)
+	for _, side in ipairs({ -1, 1 }) do
+		local flank = frame.RightVector * side
+		local towardFoot = -frame.UpVector
+		local center = frame:PointToWorldSpace(Vector3.new(side * (width + shoulder) / 2, 0, 0))
+		wedge(parent, "CalderaShoulder", CFrame.fromMatrix(center, flank:Cross(towardFoot), flank, towardFoot),
+			Vector3.new(depth, shoulder, rise), color, BASALT, true)
+	end
+end
+
+-- Offset the ridge coating from its matching rock plane to avoid coplanar faces.
+local function glacialRidge(parent: Instance, base: CFrame, feet: { Vector3 }, tip: Vector3, s: number,
+	stone: Color3, cover: Color3, surface: Enum.Material, coatedSide: number)
+	local top = base:PointToWorldSpace(tip)
+	local interior = base:PointToWorldSpace((feet[1] + feet[2] + feet[3] + tip) / 4)
+	for side, corner in ipairs(feet) do
+		local a = base:PointToWorldSpace(corner)
+		local b = base:PointToWorldSpace(feet[side % 3 + 1])
+		local depth = 12 * s
+		triangle(parent, "KnifeRidge", a, b, top, depth, shade(stone, 0.81 + side * 0.1), ROCK)
+		if side == coatedSide then
+			local normal = (b - a):Cross(top - a).Unit
+			if normal:Dot((a + b + top) / 3 - interior) < 0 then
+				normal = -normal
+			end
+			local lift = normal * (depth / 2 + 0.6 * s)
+			triangle(parent, "RidgeCover", a:Lerp(top, 0.66) + lift, b:Lerp(top, 0.48) + lift, top + lift,
+				2.6 * s, cover, surface)
+		end
+	end
+end
+
 local function branch(parent: Instance, name: string, base: CFrame, a: Vector3, b: Vector3,
 	width: number, color: Color3, solid: boolean)
 	segment(parent, name, base, a, b, width, width * 0.82, color, WOOD, solid)
@@ -136,10 +180,10 @@ PlanetProps.rock = function(parent, base, s, colors, rng)
 
 	local frame = base * CFrame.Angles(0, rng:NextNumber(0, TURN), 0)
 	local span = rng:NextNumber(10.5, 14)
-	box(parent, "FaultedSlab", at(frame, s, -3.8, 0.3, -1.2) * CFrame.Angles(-0.15, 0, -0.19),
-		Vector3.new(span, 4.5, 9.1) * s, dark, mineral, true)
-	wedge(parent, "ShearedCut", at(frame, s, 4.5, 1.5, 0.6) * CFrame.Angles(0.14, 0.66, 0.04),
-		Vector3.new(span * 0.74, 6.8, 8.4) * s, bright, cut, true)
+	box(parent, "FaultedSlab", at(frame, s, -3.8, 1.0, -1.2) * CFrame.Angles(-0.15, 0, -0.19),
+		Vector3.new(span, 6.2, 9.1) * s, dark, mineral, true)
+	wedge(parent, "ShearedCut", at(frame, s, 4.5, 2.6, 0.6) * CFrame.Angles(0.14, 0.66, 0.04),
+		Vector3.new(span * 0.74, 9.0, 8.4) * s, bright, cut, true)
 	return 16 * s
 end
 
@@ -194,32 +238,32 @@ end
 
 PlanetProps.tree = function(parent, base, s, colors, rng)
 	local frame = base * CFrame.Angles(0, rng:NextNumber(0, TURN), 0)
-	local h = rng:NextNumber(13, 17)
+	local h = rng:NextNumber(16, 20)
 	local crown = Vector3.new(3.9, h, 0) * s
 	branch(parent, "LeafBridgeTrunk", frame, Vector3.new(-2, -2.6, 0) * s, crown,
-		2.9 * s, colors[1], true)
-	frond(parent, "BroadleafWing", frame, crown + Vector3.new(1.7, 1.45, 0) * s,
-		Vector3.new(-9.8, h - 0.25, -1.45) * s, 13.6 * s, 6.8 * s, colors[2])
-	frond(parent, "RaisedLeafWing", frame, crown + Vector3.new(-2.15, 3.15, -0.7) * s,
-		Vector3.new(14, h + 4.2, 4.3) * s, 9.8 * s, 5.2 * s, colors[3])
+		3.6 * s, colors[1], true)
+	frond(parent, "BroadleafWing", frame, crown + Vector3.new(1.7, 3.45, -0.6) * s,
+		Vector3.new(-10.6, h - 0.25, -2.0) * s, 13.6 * s, 11.8 * s, colors[2])
+	frond(parent, "RaisedLeafWing", frame, crown + Vector3.new(-2.05, 6.2, -1.3) * s,
+		Vector3.new(13.5, h + 2.7, 5.2) * s, 11.5 * s, 10.6 * s, colors[3])
 	return 16.2 * s
 end
 
 PlanetProps.mushroom = function(parent, base, s, colors, rng)
 	local frame = base * CFrame.Angles(0, rng:NextNumber(0, TURN), 0)
-	local h = rng:NextNumber(7.8, 11.1)
+	local h = rng:NextNumber(9.5, 13.5)
 	local tip = Vector3.new(-2.65, h, 0) * s
-	segment(parent, "ShelfStalk", frame, Vector3.new(-4, -1.8, -1) * s, tip, 2.7 * s, 2.2 * s, colors[1], PAINT, false)
-	local fan = at(frame, s, 1.25, h + 0.1, 0) * CFrame.Angles(0.09, -1.5, -0.16)
-	wedge(parent, "Cap", fan, Vector3.new(12.8, 4.05, 13.3) * s, colors[2], NEON, false)
-	wedge(parent, "ShelfCut", fan * CFrame.new(0.8 * s, 1.4 * s, 0.9 * s),
-		Vector3.new(9.8, 2.34, 10.4) * s, colors[3], PAINT, false)
-	return 10.6 * s
+	segment(parent, "ShelfStalk", frame, Vector3.new(-4, -1.8, -1) * s, tip, 3.0 * s, 2.5 * s, colors[1], PAINT, false)
+	local fan = at(frame, s, 1.25, h + 1.4, 0) * CFrame.Angles(0.09, -1.5, -0.16)
+	wedge(parent, "Cap", fan, Vector3.new(13.3, 6.9, 13.7) * s, colors[2], NEON, false)
+	wedge(parent, "ShelfCut", fan * CFrame.new(0.4 * s, 2.8 * s, 0.8 * s),
+		Vector3.new(10.4, 4.35, 10.5) * s, colors[3], PAINT, false)
+	return 11.2 * s
 end
 
 PlanetProps.bush = function(parent, base, s, colors, rng)
 	local frame = base * CFrame.Angles(0, rng:NextNumber(0, TURN), 0)
-	local h = rng:NextNumber(4.5, 6.5)
+	local h = rng:NextNumber(6.4, 8.4)
 	if colors[2].G > 0.66 then
 		h *= 0.7
 	end
@@ -236,13 +280,13 @@ PlanetProps.cactus = function(parent, base, s, colors, rng)
 	local frame = base * CFrame.Angles(0, rng:NextNumber(0, TURN), 0)
 	local rise = rng:NextNumber(0, 2)
 	local green = colors[1]
-	pad(parent, "CactusPaddle", at(frame, s, -1.7, 2.25, 0), 4.4 * s, 2.7 * s, shade(green, 0.79))
-	pad(parent, "CactusPaddle", at(frame, s, 0.7, 7.25, 0.2) * CFrame.Angles(0.04, -0.16, 0), 4.3 * s, 2.45 * s, green)
+	pad(parent, "CactusPaddle", at(frame, s, -1.7, 2.25, 0), 4.4 * s, 3.75 * s, shade(green, 0.79))
+	pad(parent, "CactusPaddle", at(frame, s, 0.7, 7.25, 0.2) * CFrame.Angles(0.04, -0.16, 0), 4.3 * s, 3.6 * s, green)
 	pad(parent, "CactusPaddle", at(frame, s, 4.5, 12.2 + rise, 0.65) * CFrame.Angles(0.09, 0.18, 0),
-		3.9 * s, 2.12 * s, shade(green, 1.15))
+		3.9 * s, 3.25 * s, shade(green, 1.15))
 	pad(parent, "CactusPaddle", at(frame, s, -4.8, 8 + rise, 0.35) * CFrame.Angles(-0.13, -0.24, 0),
-		3.45 * s, 1.95 * s, shade(green, 0.91))
-	return 9.3 * s
+		3.45 * s, 2.9 * s, shade(green, 0.91))
+	return 9.6 * s
 end
 
 PlanetProps.deadTree = function(parent, base, s, colors, rng)
@@ -261,186 +305,196 @@ end
 
 PlanetProps.crystal = function(parent, base, s, colors, rng)
 	local frame = base * CFrame.Angles(0, rng:NextNumber(0, TURN), 0)
-	wedge(parent, "LiftedHostRock", at(frame, s, -1.8, 1.3, 0.7) * CFrame.Angles(0.25, 0.49, 0.21),
-		Vector3.new(14.7, 7.25, 11.35) * s, shade(colors[3], 0.31), SLATE, true)
+	wedge(parent, "LiftedHostRock", at(frame, s, -1.8, 2.1, 0.7) * CFrame.Angles(0.25, 0.49, 0.21),
+		Vector3.new(14.7, 9.4, 11.35) * s, shade(colors[3], 0.31), SLATE, true)
 	for i = 1, 3 do
 		local sweep = (i - 2) * 4.15
-		local size = rng:NextNumber(8.3, 12.4)
-		local shard = at(frame, s, sweep, 2.9 + (i % 2) * 1.45, 2.75 - i * 1.6)
-			* CFrame.Angles(-0.42, (i - 2) * 0.73 - 0.25, (2 - i) * 0.50)
-		wedge(parent, "Crystal", shard, Vector3.new(4.75, 9.3, size) * s, colors[i], NEON, false)
+		local size = rng:NextNumber(8.9, 11.7)
+		local height = 19.4 - math.abs(i - 2) * 5.0
+		local shard = at(frame, s, sweep, height * 0.49, 2.75 - i * 1.6)
+			* CFrame.Angles(-0.18, (i - 2) * 0.62 - 0.25, (2 - i) * 0.42)
+		wedge(parent, "Crystal", shard, Vector3.new(5.9, height, size) * s, colors[i], NEON, false)
 	end
-	return 13 * s
+	return 14.5 * s
 end
 
 PlanetProps.palm = function(parent, base, s, colors, rng)
 	local frame = base * CFrame.Angles(0, rng:NextNumber(0, TURN), 0)
-	local joint = Vector3.new(1.8, 8.7, 0.25) * s
-	local topY = rng:NextNumber(17.6, 20.4)
+	local joint = Vector3.new(1.4, 10.7, 0.25) * s
+	local topY = rng:NextNumber(21.1, 24.9)
 	local head = Vector3.new(7.7, topY, 1.3) * s
-	branch(parent, "WindwardTrunk", frame, Vector3.new(-2.8, -2.45, -1) * s, joint, 2.85 * s, colors[1], true)
-	branch(parent, "WindwardTrunk", frame, joint, head, 2.12 * s, shade(colors[1], 1.16), true)
-	frond(parent, "PalmFan", frame, head + Vector3.new(-1.0, 0.9, 0) * s, Vector3.new(17.45, topY - 3.5, -3.5) * s,
-		11.7 * s, 3.7 * s, colors[2])
-	frond(parent, "PalmFan", frame, head + Vector3.new(2.1, 0.65, 0) * s, Vector3.new(-4.8, topY - 0.1, 8.7) * s,
-		10.4 * s, 3.15 * s, shade(colors[2], 0.83))
+	branch(parent, "WindwardTrunk", frame, Vector3.new(-2.8, -2.45, -1) * s, joint, 3.5 * s, colors[1], true)
+	branch(parent, "WindwardTrunk", frame, joint, head, 2.75 * s, shade(colors[1], 1.16), true)
+	frond(parent, "PalmFan", frame, head + Vector3.new(-1.0, 2.2, 0) * s, Vector3.new(17.5, topY - 6.1, -3.1) * s,
+		13.1 * s, 8.6 * s, colors[2])
+	frond(parent, "PalmFan", frame, head + Vector3.new(1.2, 2.5, -1.8) * s, Vector3.new(-6.5, topY - 4.2, 8.8) * s,
+		12.1 * s, 7.1 * s, shade(colors[2], 0.83))
 	return 20 * s
 end
 
 PlanetProps.volcano = function(parent, base, s, colors, rng)
-	local r = rng:NextNumber(172, 195) * s
-	local h = rng:NextNumber(190, 228) * s
+	local r = rng:NextNumber(192, 218) * s
+	local h = rng:NextNumber(239, 284) * s
 	local stone, molten = colors[1], colors[2]
-	local floorY = -27
-	cliff(parent, "SplitCalderaWall", base,
-		Vector3.new(-0.94 * r, floorY, -0.11 * r), Vector3.new(-0.12 * r, floorY, -0.11 * r),
-		Vector3.new(-0.31 * r, h, -0.11 * r), Vector3.new(-0.67 * r, h * 0.88, -0.11 * r),
-		0.87 * r, stone, BASALT)
-	cliff(parent, "FallenCalderaWall", base,
-		Vector3.new(0.115 * r, floorY, 0.1 * r), Vector3.new(0.91 * r, floorY, 0.1 * r),
-		Vector3.new(0.76 * r, h * 0.67, 0.1 * r), Vector3.new(0.33 * r, h * 0.77, 0.1 * r),
-		0.81 * r, shade(stone, 0.8), BASALT)
+	local foot, lip = 0.685 * r, 0.252 * r
+	local footY = -27
+	local lower = {
+		Vector3.new(-foot, footY, foot), Vector3.new(foot, footY, foot),
+		Vector3.new(foot, footY, -foot), Vector3.new(-foot, footY, -foot),
+	}
+	local crest = {
+		Vector3.new(-lip, h, lip), Vector3.new(lip, h, lip),
+		Vector3.new(lip, h, -lip), Vector3.new(-lip, h, -lip),
+	}
+	for side = 2, 4 do
+		local j = side % 4 + 1
+		calderaFace(parent, base, lower[side], lower[j], crest[j], crest[side], 9 * s, shade(stone, 0.79 + 0.09 * side))
+	end
 
-	-- The outflow crosses the gap in both directions. The walls never cap it.
-	box(parent, "CalderaBreach", base * CFrame.new(-0.012 * r, 1.25 * s, 0.08 * r),
-		Vector3.new(0.47 * r, 3.3 * s, 1.40 * r), molten, NEON, false)
-	local nearLeft = 0.325 * r + 0.45 * s
-	local nearRight = 0.505 * r + 0.45 * s
-	segment(parent, "LavaRibbon", base, Vector3.new(-0.186 * r, 2.5 * s, nearLeft),
-		Vector3.new(-0.38 * r, 0.87 * h, nearLeft), 11 * s, 2.4 * s, molten, NEON, false)
-	segment(parent, "LavaRibbon", base, Vector3.new(0.197 * r, 2.5 * s, nearRight),
-		Vector3.new(0.42 * r, 0.67 * h, nearRight), 8 * s, 2.1 * s, shade(molten, 0.87), NEON, false)
+	-- Two triangular flanks fall away from the broken lip, leaving a V-shaped outlet.
+	local breachNormal = Vector3.xAxis:Cross(crest[1] - lower[1]).Unit
+	local setback = breachNormal * (4.5 * s)
+	local toewardLeft = lower[1]:Lerp(lower[2], 0.41)
+	local toewardRight = lower[2]:Lerp(lower[1], 0.41)
+	triangle(parent, "BrokenCalderaRim", base:PointToWorldSpace(lower[1] - setback),
+		base:PointToWorldSpace(toewardLeft - setback), base:PointToWorldSpace(crest[1] - setback),
+		9 * s, shade(stone, 1.10), BASALT)
+	triangle(parent, "BrokenCalderaRim", base:PointToWorldSpace(toewardRight - setback),
+		base:PointToWorldSpace(lower[2] - setback), base:PointToWorldSpace(crest[2] - setback),
+		9 * s, shade(stone, 0.89), BASALT)
 
-	wedge(parent, "CollapsedRim", base * CFrame.new(-0.58 * r, 7 * s, 0.48 * r) * CFrame.Angles(0.15, 0.69, 0.08),
-		Vector3.new(0.49 * r, 69 * s, 0.40 * r), shade(stone, 1.12), BASALT, true)
-	wedge(parent, "CollapsedRim", base * CFrame.new(0.63 * r, 8 * s, -0.45 * r) * CFrame.Angles(-0.16, -0.57, -0.12),
-		Vector3.new(0.37 * r, 62 * s, 0.44 * r), shade(stone, 0.9), BASALT, true)
-	return 1.12 * r
+	-- The molten surface sits between the three intact rim walls.
+	part(parent, "Part", "CalderaLake", Vector3.new(6.4 * s, 1.91 * lip, 1.91 * lip),
+		base * CFrame.new(0, h - 2.0 * s, 0) * CFrame.Angles(0, 0, math.pi / 2),
+		molten, NEON, false, Enum.PartType.Cylinder)
+	segment(parent, "BreachLavafall", base, Vector3.new(0.09 * lip, h - 0.6 * s, lip * 0.75),
+		Vector3.new(-0.09 * foot, 2.7 * s, foot + 5.1 * s), r * 0.139, 5.8 * s,
+		molten, NEON, false)
+
+	-- A hot seam on the opposite face remains visible when the mouth faces away.
+	local rearStart = Vector3.new(-0.29 * lip, h + 0.45 * s, -lip - 0.6 * s)
+	local rearEnd = rearStart:Lerp(Vector3.new(-0.25 * foot, footY, -foot - 1.6 * s), 0.83)
+	segment(parent, "RearLavaSeam", base, rearStart, rearEnd, r * 0.078, 5.4 * s, shade(molten, 0.92), NEON, false)
+	return r
 end
 
 PlanetProps.mountain = function(parent, base, s, colors, rng)
-	local r = rng:NextNumber(185, 225) * s
-	local h = rng:NextNumber(191, 251) * s
+	local r = rng:NextNumber(188, 222) * s
+	local h = rng:NextNumber(271, 320) * s
 	local cold = colors[2].R > 0.8
-	local crest1, crest2 = 1, 0.71
-	local crown = SNOW
+	local surface = SNOW
+	local short = 0.76
 	if not cold then
-		h *= 0.72
-		crest1, crest2 = 0.83, 0.61
-		crown = GRASS
+		h *= 0.92
+		short = 0.82
+		surface = GRASS
 	end
-	local nearZ, farZ = -0.18 * r, 0.14 * r
-	local nearDepth, farDepth = 0.78 * r, 0.70 * r
-	local leftTop = Vector3.new(-0.68 * r, (crest1 - 0.11) * h, nearZ)
-	local leftCrown = Vector3.new(-0.31 * r, crest1 * h, nearZ)
-	local rightCrown = Vector3.new(0.29 * r, crest2 * h, farZ)
-	local rightTop = Vector3.new(0.65 * r, (crest2 - 0.09) * h, farZ)
-	cliff(parent, "RaisedGlacialRidge", base,
-		Vector3.new(-0.91 * r, -28, nearZ), Vector3.new(-0.075 * r, -28, nearZ),
-		leftCrown, leftTop, nearDepth, colors[1], ROCK)
-	cliff(parent, "BrokenGlacialRidge", base,
-		Vector3.new(0.075 * r, -26, farZ), Vector3.new(0.94 * r, -26, farZ),
-		rightTop, rightCrown, farDepth, shade(colors[1], 0.86), ROCK)
 
-	segment(parent, "CrestShelf", base, leftTop - Vector3.new(0, 0.047 * h, 0),
-		leftCrown - Vector3.new(0, 0.055 * h, 0), h * 0.125, nearDepth + 2.2 * s, colors[2], crown, true)
-	segment(parent, "CrestShelf", base, rightCrown - Vector3.new(0, 0.042 * h, 0),
-		rightTop - Vector3.new(0, 0.052 * h, 0), h * 0.101, farDepth + 1.8 * s, shade(colors[2], 0.91), crown, true)
-	local strata = ICE
-	if not cold then
-		strata = ROCK
-	end
-	wedge(parent, "RidgeSaddle", base * CFrame.new(0.03 * r, -4 * s, -0.04 * r) * CFrame.Angles(0, 1.45, 0.06),
-		Vector3.new(0.75 * r, 0.43 * h, 0.74 * r), shade(colors[1], 0.71), strata, true)
-	wedge(parent, "ShearedMoraine", base * CFrame.new(0.21 * r, -6 * s, 0.44 * r) * CFrame.Angles(0, -1.11, -0.14),
-		Vector3.new(0.39 * r, 0.27 * h, 0.53 * r), shade(colors[1], 1.13), strata, true)
-	return 1.08 * r
+	local forwardPeak = Vector3.new(-0.35 * r, h, -0.21 * r)
+	local crossedPeak = Vector3.new(0.47 * r, h * short, 0.34 * r)
+	local forwardFeet = {
+		Vector3.new(-0.96 * r, -24, -0.38 * r), Vector3.new(0.45 * r, -24, -0.62 * r),
+		Vector3.new(-0.42 * r, -24, 0.80 * r),
+	}
+	local crossedFeet = {
+		Vector3.new(-0.48 * r, -25, -0.37 * r), Vector3.new(0.73 * r, -25, -0.68 * r),
+		Vector3.new(0.88 * r, -25, 0.59 * r),
+	}
+	glacialRidge(parent, base, forwardFeet, forwardPeak, s, colors[1], colors[2], surface, 1)
+	glacialRidge(parent, base, crossedFeet, crossedPeak, s,
+		shade(colors[1], 0.9), shade(colors[2], 0.94), surface, 3)
+	return 1.12 * r
 end
 
 PlanetProps.giantTree = function(parent, base, s, colors, rng)
-	local h = rng:NextNumber(143, 165) * s
+	local h = rng:NextNumber(208, 241) * s
 	local bark = colors[1]
-	local short = Vector3.new(54 * s, h * 0.77, -13 * s)
-	local tall = Vector3.new(-48 * s, h, 2 * s)
+	local short = Vector3.new(48 * s, h * 0.83, -15 * s)
+	local tall = Vector3.new(-46 * s, h, 1.5 * s)
 	for _, side in ipairs({ -1, 1 }) do
 		local head = tall
 		if side == 1 then
 			head = short
 		end
-		local foot = Vector3.new(side * 38 * s, -26, side * -7 * s)
-		local elbow = head * 0.57 + Vector3.new(side * -14 * s, 0, 9 * s)
-		branch(parent, "CanopyBridgeBole", base, foot, elbow, 23 * s, bark, true)
-		branch(parent, "CanopyBridgeBole", base, elbow, head, 15.4 * s, shade(bark, 1.14), true)
+		local foot = Vector3.new(side * 36 * s, -26, side * -8 * s)
+		local elbow = head * 0.53 + Vector3.new(side * -12 * s, 0, 10 * s)
+		branch(parent, "CanopyBridgeBole", base, foot, elbow, 29 * s, bark, true)
+		branch(parent, "CanopyBridgeBole", base, elbow, head, 23.6 * s, shade(bark, 1.14), true)
 		for _, rootSide in ipairs({ -1, 1 }) do
-			local root = foot + Vector3.new(side * 15 * s, 1, rootSide * 22 * s)
-			branch(parent, "RootSpur", base, root, elbow:Lerp(foot, 0.58), 9 * s,
+			local root = foot + Vector3.new(side * 19 * s, 1.8, rootSide * 24 * s)
+			branch(parent, "RootSpur", base, root, elbow:Lerp(foot, 0.66), 12 * s,
 				shade(bark, 0.92 + rootSide * 0.07), true)
 		end
-		local wing = head + Vector3.new(side * 36 * s, -5 * s, 20 * s)
-		branch(parent, "LeafSpanBranch", base, elbow:Lerp(head, 0.53), wing, 10.5 * s, shade(bark, 0.87), false)
-		frond(parent, "OuterCanopy", base, head + Vector3.new(side * -13 * s, 3 * s, -4 * s),
-			wing + Vector3.new(side * 12 * s, -3 * s, 13 * s), 62 * s, 22 * s, colors[2])
-		frond(parent, "RaisedCanopy", base, head + Vector3.new(side * -25 * s, 19 * s, 10 * s),
-			head + Vector3.new(side * 29 * s, 12 * s, -31 * s), 51 * s, 18 * s, colors[3])
+		local wing = head + Vector3.new(side * 28 * s, -5 * s, 17 * s)
+		branch(parent, "LeafSpanBranch", base, elbow:Lerp(head, 0.55), wing, 15.6 * s, shade(bark, 0.87), false)
+		frond(parent, "OuterCrown", base, head + Vector3.new(side * -14 * s, 9 * s, -16 * s),
+			wing + Vector3.new(side * 16 * s, -8 * s, 22 * s), 76 * s, 55 * s, colors[2])
+		frond(parent, "RaisedCrown", base, head + Vector3.new(side * -18 * s, 29 * s, 22 * s),
+			head + Vector3.new(side * 34 * s, 8 * s, -42 * s), 67 * s, 40 * s, colors[3])
 	end
-	frond(parent, "CanopySpan", base, tall + Vector3.new(-10 * s, 10 * s, -4 * s),
-		short + Vector3.new(21 * s, 20 * s, -8 * s), 44 * s, 16 * s, shade(colors[2], 0.93))
+	frond(parent, "SpanCrown", base, tall + Vector3.new(-5 * s, 14 * s, -2 * s),
+		short + Vector3.new(21 * s, 25 * s, -8 * s), 66 * s, 39 * s, shade(colors[2], 0.87))
+	frond(parent, "SpanCrown", base, short + Vector3.new(-10 * s, 39 * s, 19 * s),
+		tall + Vector3.new(-23 * s, -9 * s, 34 * s), 60 * s, 35 * s, shade(colors[3], 0.92))
 	return 118 * s
 end
 
 PlanetProps.mesa = function(parent, base, s, colors, rng)
-	local r = rng:NextNumber(117, 148) * s
-	local h = rng:NextNumber(112, 145) * s
+	local r = rng:NextNumber(136, 160) * s
+	local h = rng:NextNumber(172, 215) * s
 	local strata, ledge, plateau = colors[1], colors[2], colors[3]
 	for _, side in ipairs({ -1, 1 }) do
 		local capHeight = h
+		local z = -0.19 * r
+		local depth = 0.94 * r
 		if side == 1 then
-			capHeight *= 0.67
+			capHeight *= 0.72
+			z = 0.20 * r
+			depth = 0.77 * r
 		end
-		local z = side * 0.17 * r
-		local depth = r * (0.67 + side * 0.055)
-		local outer = Vector3.new(side * 0.91 * r, -27, z)
-		local inner = Vector3.new(side * 0.16 * r, -27, z)
-		local capInside = Vector3.new(side * 0.20 * r, capHeight * 0.92, z)
-		local capOutside = Vector3.new(side * 0.81 * r, capHeight, z)
+		local outer = Vector3.new(side * 0.95 * r, -26, z)
+		local inner = Vector3.new(side * -0.04 * r, -26, z)
+		local capInside = Vector3.new(side * 0.20 * r, capHeight * 0.91, z)
+		local capOutside = Vector3.new(side * 0.72 * r, capHeight, z)
 		cliff(parent, "BrokenMesa", base, outer, inner, capInside, capOutside,
 			depth, shade(strata, 1 + side * 0.06), SANDSTONE)
 
-		local benchInside = inner:Lerp(capInside, 0.73) - Vector3.new(side * 1.8 * s, 0, -1.7 * s)
-		local benchOutside = outer:Lerp(capOutside, 0.73) + Vector3.new(side * 4.2 * s, 0, 1.7 * s)
+		local benchInside = inner:Lerp(capInside, 0.68) - Vector3.new(side * 2.9 * s, 0, -1.7 * s)
+		local benchOutside = outer:Lerp(capOutside, 0.68) + Vector3.new(side * 4.8 * s, 0, 1.7 * s)
 		segment(parent, "HangingStratum", base, benchInside, benchOutside,
-			15 * s, depth + 5.8 * s, ledge, SANDSTONE, true)
-		segment(parent, "ShearedPlateau", base, capInside + Vector3.new(side * -2.1 * s, -2.55 * s, 0),
-			capOutside + Vector3.new(side * 3 * s, -2.9 * s, 0), 9.2 * s, depth + 6.2 * s, plateau, SANDSTONE, true)
-		wedge(parent, "SlidSediment", base * CFrame.new(side * 0.69 * r, -10 * s, 0.43 * r)
-			* CFrame.Angles(0.25, -side * 0.72, 0.09),
-			Vector3.new(0.33 * r, 57 * s, 0.36 * r), shade(ledge, 0.84), SANDSTONE, true)
+			22 * s, depth + 7.8 * s, ledge, SANDSTONE, true)
+		segment(parent, "ShearedPlateau", base, capInside + Vector3.new(side * -2.1 * s, -5.4 * s, 0),
+			capOutside + Vector3.new(side * 3.1 * s, -5.5 * s, 0), 19 * s, depth + 9 * s, plateau, SANDSTONE, true)
+		wedge(parent, "ShearedScree", base * CFrame.new(side * 0.68 * r, 41.5 * s - 23, side * 0.53 * r)
+			* CFrame.Angles(0.07, side * 2.97, 0.10 * side),
+			Vector3.new(0.48 * r, 83 * s, 0.58 * r), shade(ledge, 0.70 + side * 0.07), SANDSTONE, true)
 	end
-	return 1.07 * r
+	return 1.22 * r
 end
 
 PlanetProps.arch = function(parent, base, s, colors, rng)
-	local r = rng:NextNumber(88, 101) * s
-	local h = rng:NextNumber(105, 128) * s
+	local r = rng:NextNumber(95, 108) * s
+	local h = rng:NextNumber(151, 181) * s
 	local sandstone = colors[1]
+	local leftZ, rightZ = -12 * s, 15 * s
 	cliff(parent, "WindCutAbutment", base,
-		Vector3.new(-0.94 * r, -26, -1.2 * s), Vector3.new(-0.48 * r, -26, -1.2 * s),
-		Vector3.new(-0.18 * r, 0.91 * h, -1.2 * s), Vector3.new(-0.52 * r, 0.86 * h, -1.2 * s),
-		38 * s, sandstone, SANDSTONE)
+		Vector3.new(-0.97 * r, -26, leftZ), Vector3.new(-0.43 * r, -26, leftZ),
+		Vector3.new(-0.13 * r, 0.92 * h, leftZ), Vector3.new(-0.55 * r, 0.86 * h, leftZ),
+		56 * s, sandstone, SANDSTONE)
 	cliff(parent, "LeaningAbutment", base,
-		Vector3.new(0.35 * r, -26, 2.1 * s), Vector3.new(0.89 * r, -26, 2.1 * s),
-		Vector3.new(0.68 * r, 0.73 * h, 2.1 * s), Vector3.new(0.38 * r, 0.68 * h, 2.1 * s),
-		34 * s, shade(sandstone, 0.79), SANDSTONE)
-	local leftEnd = Vector3.new(-0.52 * r, 0.95 * h, 0)
-	local rightEnd = Vector3.new(0.67 * r, 0.79 * h, 2.8 * s)
+		Vector3.new(0.33 * r, -26, rightZ), Vector3.new(0.94 * r, -26, rightZ),
+		Vector3.new(0.70 * r, 0.75 * h, rightZ), Vector3.new(0.32 * r, 0.69 * h, rightZ),
+		51 * s, shade(sandstone, 0.79), SANDSTONE)
+	local leftEnd = Vector3.new(-0.56 * r, 0.92 * h, leftZ)
+	local rightEnd = Vector3.new(0.68 * r, 0.77 * h, rightZ)
 	segment(parent, "FaultedLintel", base, leftEnd, rightEnd,
-		24 * s, 43 * s, shade(sandstone, 1.08), SANDSTONE, true)
-	segment(parent, "LintelCleavage", base, leftEnd + Vector3.new(0, 11.2 * s, -8.1 * s),
-		leftEnd:Lerp(rightEnd, 0.73) + Vector3.new(0, 10.2 * s, -8.1 * s),
-		6.4 * s, 21 * s, shade(sandstone, 0.86), SANDSTONE, true)
-	wedge(parent, "ArchBreakaway", base * CFrame.new(0.67 * r, 0.01 * h, 15 * s) * CFrame.Angles(0.23, 0.6, 0.22),
-		Vector3.new(24, 42, 35) * s, shade(sandstone, 1.17), SANDSTONE, true)
-	return 1.04 * r
+		38 * s, 63 * s, shade(sandstone, 1.12), SANDSTONE, true)
+	segment(parent, "LintelCleavage", base, leftEnd + Vector3.new(3 * s, 15.7 * s, -11 * s),
+		leftEnd:Lerp(rightEnd, 0.75) + Vector3.new(0, 14.8 * s, -12 * s),
+		13.5 * s, 33 * s, shade(sandstone, 0.86), SANDSTONE, true)
+	wedge(parent, "ArchBreakaway", base * CFrame.new(0.72 * r, 0.08 * h, 22 * s) * CFrame.Angles(0.18, 0.48, 0.16),
+		Vector3.new(39, 68, 43) * s, shade(sandstone, 1.05), SANDSTONE, true)
+	return 1.16 * r
 end
 
 PlanetProps.spire = function(parent, base, s, colors, rng)
