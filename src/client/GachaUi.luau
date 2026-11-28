@@ -1,14 +1,16 @@
--- 부품 뽑기 화면 (Nick 11-28 "부품 뽑기도 추가", "발사 전에 뽑을 수 있게"). 규칙·수치는 Config.Gacha, 서버는 GachaService.
--- 오른쪽 위 버튼 줄(시점·디버그 아래)의 '부품 뽑기' 버튼으로 엽니다. 탑승 대기·조립·정산 때만 보이고 카운트다운·비행이 되면 닫힘.
--- 화면: 부품 종류 탭 6개 → 뽑기 하나(확률, 1회·10회 버튼) → 맨 아래 '현재 장착 중' 줄(아이콘·이름·레어도·★·레벨)과
--- 도감 버튼 (Nick 11-28 "현재 장착중 을 표시", "도감과 현재장착중은 부품 뽑기 제일 밑으로").
+-- 부품 뽑기 창과 내 장비 창 (Nick 11-28 "부품 뽑기도 추가", "발사 전에 뽑을 수 있게", "장비창과 뽑기창 분리할것").
+-- 규칙·수치는 Config.Gacha, 서버는 GachaService. 두 창은 오른쪽 위 버튼 줄(시점·디버그 아래)의 '부품 뽑기'·'내 장비' 버튼으로
+-- 엽니다(한 번에 하나만, Nick 11-28 "장비창도 우측에 메뉴"). 탑승 대기·조립·정산 때만 보이고 카운트다운·비행이 되면 닫힘.
+-- 뽑기 창: 부품 종류 탭 6개 → 뽑기 하나(확률, 1회·10회 버튼) → 안내 글.
 -- 값은 내 최고 기록 km × Config.Gacha.PricePerKm (Nick 11-28 "일반 고급 최고급 넣지 말고 뽑기 일괄").
 -- 뽑기 그림은 캡슐 대신 빛이 새는 우주 보급 상자 (Nick 11-28 "뽑기 아이콘은 캡슐 아이콘 말고 적당한 아이콘", Catalog.GachaIcon).
--- 뽑으면 보급 상자가 흔들린 뒤 결과 카드가 하나씩 열림 (10회는 11장). 결과마다 '새 부품!' / '★ 돌파' / '경험치 +N'.
--- '도감' 은 그 종류 30개(일반 14·희귀 9·영웅 5·전설 2, 모두 180개)를 레어도 버튼으로 나눠 한 번에 14장까지 보여 줌
--- (휴대폰 사양: 아이콘을 한꺼번에 많이 만들지 않음). 모은 것은 그림과 이름, 못 모은 것은 그림자와 '?'.
--- 카드를 누르면 오른쪽에 큰 그림·도감 번호·설명·나올 확률. 지금 부품과 레어도가 같은 모은 부품은
--- '이 모양으로 바꾸기' 로 바꿔 낌 (능력치는 같음).
+-- 뽑으면 보급 상자가 세 번 점점 세게 흔들리고(나올 레어도 쪽 색으로 빛이 커짐) 빛이 모였다가 터진 뒤 카드가 상자에서 날아 나옴
+-- (Nick 11-28 "한번 흔들 하고 뽑히는거 말고 좀 더 효과", 10회는 11장, 누르면 건너뜀). 결과마다 '새 부품!' / '★ 돌파' / '경험치 +N'.
+-- 내 장비 창: 종류 탭 6개 → 그 종류 도감 → 안내 글 → 맨 아래 '현재 장착 중' 줄(아이콘·이름·레어도·★·레벨·경험치).
+-- 도감은 그 종류 30개(일반 14·희귀 9·영웅 5·전설 2, 모두 180개)를 레어도 버튼으로 나눠 한 번에 14장까지 보여 줌
+-- (휴대폰 사양: 아이콘을 한꺼번에 많이 만들지 않음). 모은 것은 그림과 이름, 아직 못 뽑은 것은 그림 없이 물음표와 '???'
+-- (Nick 11-28 "도감에서 아직 못뽑은건 못보게 물음표로 표시"). 카드를 누르면 오른쪽에 큰 그림·도감 번호·설명·나올 확률.
+-- 지금 부품과 레어도가 같은 모은 부품은 '이 모양으로 바꾸기' 로 바꿔 낌 (능력치는 같음).
 -- 누가 전설을 뽑으면 모두의 화면 위쪽에 알림이 뜨고, 다른 사람은 '축하' 를 누를 수 있음 (누른 사람 코인 +50).
 -- 뽑은 사람은 결과 화면에 '모두에게 알렸어요 · 축하 N' 이 뜸 (위쪽 알림이 결과 제목을 가리지 않게).
 
@@ -40,21 +42,33 @@ local DARK = Color3.fromRGB(10, 12, 20)
 local BUTTON_TOP = 152 -- 오른쪽 위 버튼 줄: 시점(60) · 디버그(108) 아래
 local BUTTON_WIDTH = 150
 local BUTTON_HEIGHT = 48
+local EQUIP_TOP = BUTTON_TOP + BUTTON_HEIGHT + 8 -- '내 장비' 버튼은 '부품 뽑기' 바로 아래
 local PANEL_WIDTH = 900
-local PANEL_HEIGHT = 610
+local PANEL_HEIGHT = 610 -- 내 장비 창과 뽑기 결과 화면
 local PAD = 16
 local TAB_TOP = 60
 local TAB_HEIGHT = 60
 local BODY_TOP = TAB_TOP + TAB_HEIGHT + 8
 local BODY_HEIGHT = 312
 local FOOT_TOP = BODY_TOP + BODY_HEIGHT + 4
+local GACHA_FOOT_HEIGHT = 44
+local GACHA_HEIGHT = FOOT_TOP + GACHA_FOOT_HEIGHT + 12 -- 뽑기 창은 안내 글까지 (장비는 내 장비 창으로 나눔)
 local INFO_HEIGHT = 92
-local INFO_TOP = PANEL_HEIGHT - PAD - INFO_HEIGHT -- '현재 장착 중' 줄과 도감 버튼은 판 맨 아래
-local FOOT_HEIGHT = INFO_TOP - FOOT_TOP - 6 -- 안내 글은 뽑기 칸과 맨 아래 줄 사이
+local INFO_TOP = PANEL_HEIGHT - PAD - INFO_HEIGHT -- 내 장비 창: '현재 장착 중' 줄은 맨 아래
+local FOOT_HEIGHT = INFO_TOP - FOOT_TOP - 6 -- 내 장비 창 안내 글은 도감과 맨 아래 줄 사이
+local EXP_WIDTH = 210 -- '현재 장착 중' 줄 오른쪽 경험치 막대
 local NEWS_TOP = 84 -- 위쪽 가운데 안내 두 줄(0~76) 바로 아래
 local PENDING_TIMEOUT = 3 -- 결과가 이만큼(초) 안 오면 버튼을 다시 풂
-local REVEAL_GAP = 0.09 -- 10회 뽑기 카드가 하나씩 열리는 간격(초)
-local SHAKE_SECONDS = 0.45 -- 결과 카드가 열리기 전 보급 상자가 흔들리는 시간
+local REVEAL_GAP = 0.09 -- 10회 뽑기 카드가 하나씩 날아 나오는 간격(초)
+-- 뽑기 연출 (Nick 11-28 "한번 흔들 하고 뽑히는거 말고 좀 더 효과 넣어서"): 상자가 튀어나와 세 번 점점 세게 흔들리고(흔들릴 때마다
+-- 뒤 빛이 커지며 나올 가장 높은 레어도 쪽 색으로 한 단계씩 바뀜), 빛이 모였다가 번쩍 터지며 고리·반짝이가 퍼지고, 카드가 상자
+-- 자리에서 제자리로 날아감. 결과 화면을 누르면 바로 카드로 건너뜀. 폰 사양: 이미지·파티클 없이 Frame 몇십 개와 트윈만, 다 쓰면 지움
+local APPEAR_SECONDS = 0.25 -- 상자가 튀어나오는 시간
+local SHAKES = 3
+local SHAKE_GAP = 0.36 -- 흔들림 한 번
+local CHARGE_SECONDS = 0.45 -- 빛이 모이는 시간 (그다음 터짐)
+local FLY_SECONDS = 0.32 -- 카드가 상자 자리에서 제자리로 날아가는 시간
+local CRATE_CENTER = Vector2.new(PANEL_WIDTH / 2, 290) -- 결과 화면에서 상자 가운데
 local RETRY = 4 -- 내 부품 값을 못 받았으면 이 간격(초)으로 다시 요청
 
 type Tab = { button: TextButton, sub: TextLabel, stroke: UIStroke }
@@ -69,7 +83,12 @@ local infoIconSlot: Frame
 local infoName: TextLabel
 local infoLine: TextLabel
 local infoHint: TextLabel
-local dexButton: TextButton
+local equipButton: TextButton
+local equipIconSlot: Frame
+local equipIconId = "" -- '내 장비' 버튼 그림에 쓴 엔진 모양
+local equipPanel: Frame
+local infoExpText: TextLabel
+local infoExpFill: Frame
 local pullArea: Frame
 local pullOne: TextButton
 local pullTen: TextButton
@@ -84,12 +103,14 @@ local newsIconSlot: Frame
 local resultCheers: TextLabel? = nil -- 내 전설 결과 화면의 '모두에게 알렸어요 · 축하 N'
 local revealDone = false -- 결과 카드가 다 열렸는지 (그 전에는 전설 알림 글자를 숨겨 미리 알려 주지 않음)
 
-local tabs: { [string]: Tab } = {}
+local tabs: { [string]: Tab } = {} -- 뽑기 창 탭
+local equipTabs: { [string]: Tab } = {} -- 내 장비 창 탭
 local selected = Config.Parts.Types[1].Id
 local progress: any = nil -- 서버가 보낸 내 부품 (PartProgress 신호)
 local owned: { [string]: { [string]: boolean } } = {}
 local isOpen = false
-local dexOpen = false
+local equipOpen = false -- 내 장비 창 (뽑기 창 isOpen 과 한 번에 하나만)
+local seq = 0 -- 결과 연출 차례: 건너뛰거나 다시 뽑으면 늘어서 남은 단계가 멈춤
 local pending = false
 local pendingAt = 0
 local showingResult = false
@@ -184,9 +205,9 @@ local function clear(parent: Instance)
 	end
 end
 
-local function refreshTabs()
+local function refreshTabs(store: { [string]: Tab })
 	for _, info in ipairs(Config.Parts.Types) do
-		local tab = tabs[info.Id]
+		local tab = store[info.Id]
 		if tab then
 			local rarity, star = partOf(info.Id)
 			local on = info.Id == selected
@@ -215,9 +236,29 @@ local function refreshInfo()
 		infoHint.Text = variant.Desc
 		infoHint.TextColor3 = C.Dim
 	end
-	dexButton.Text = if dexOpen
-		then "뽑기로 돌아가기"
-		else string.format("도감 %d/%d", ownedCount(selected), #Catalog.ofType(selected))
+	-- 경험치 막대: 지금 레벨에서 쌓인 양 / 다음 레벨까지 (한도·만렙이면 가득)
+	local exp = number(progress and progress.exp, selected, 0)
+	local need = Leveling.need(level, rarity)
+	if level >= Leveling.MaxLevel then
+		infoExpText.Text = "만렙"
+		infoExpFill.Size = UDim2.fromScale(1, 1)
+	elseif level >= cap then
+		infoExpText.Text = "한도 · 돌파하면 다시 올라요"
+		infoExpFill.Size = UDim2.fromScale(1, 1)
+	else
+		infoExpText.Text = "경험치 " .. shortExp(math.floor(exp)) .. " / " .. shortExp(need)
+		infoExpFill.Size = UDim2.fromScale(math.clamp(exp / math.max(need, 1), 0, 1), 1)
+	end
+end
+
+-- '내 장비' 버튼 그림: 내 엔진 모양 (바뀌면 다시 그림)
+local function refreshEquipIcon()
+	local _, _, _, _, variant = partOf(Config.Parts.Types[1].Id)
+	if variant.Id ~= equipIconId then
+		equipIconId = variant.Id
+		clear(equipIconSlot)
+		PartIcon.make(equipIconSlot, variant, 34)
+	end
 end
 
 local function bestKm(): number
@@ -340,7 +381,25 @@ local function dexNumber(item: Catalog.Variant): string
 	return string.format("No.%02d", item.No)
 end
 
--- 오른쪽 설명 칸: 고른 부품 (모은 것은 그림·이름·설명, 못 모은 것은 그림자와 확률만)
+-- 아직 못 뽑은 부품 자리: 그림 없이 레어도 색 칸에 물음표 (Nick 11-28 "도감에서 아직 못뽑은건 못보게 물음표로 표시")
+local function mystery(parent: Instance, px: number, rarity: number): Frame
+	local color = Catalog.RarityColors[rarity]
+	local box = Ui.frame(parent, "Mystery", {
+		Size = UDim2.fromOffset(px, px),
+		BackgroundColor3 = color:Lerp(DARK, 0.78),
+		BackgroundTransparency = 0,
+	})
+	Ui.corner(box, math.floor(px * 0.18))
+	Ui.stroke(box, color, 2, 0.55)
+	Ui.label(box, "Mark", "?", math.floor(px * 0.6), {
+		Size = UDim2.fromScale(1, 1),
+		TextColor3 = rarityText(rarity),
+		TextStrokeTransparency = 1,
+	})
+	return box
+end
+
+-- 오른쪽 설명 칸: 고른 부품 (모은 것은 그림·이름·설명, 못 뽑은 것은 물음표와 확률만)
 local function dexDetail(item: Catalog.Variant, have: boolean, wearing: boolean, rarity: number)
 	local pool = #Catalog.ofRarity(item.Type, item.Rarity)
 	local color = Catalog.RarityColors[item.Rarity]
@@ -357,7 +416,11 @@ local function dexDetail(item: Catalog.Variant, have: boolean, wearing: boolean,
 		Position = UDim2.fromOffset(12, 12),
 		Size = UDim2.fromOffset(DEX_DETAIL_ICON, DEX_DETAIL_ICON),
 	})
-	PartIcon.make(slot, item, DEX_DETAIL_ICON, not have)
+	if have then
+		PartIcon.make(slot, item, DEX_DETAIL_ICON)
+	else
+		mystery(slot, DEX_DETAIL_ICON, item.Rarity)
+	end
 	local textLeft = 12 + DEX_DETAIL_ICON + 12
 	local textWidth = DEX_DETAIL_WIDTH - textLeft - 10
 	Ui.label(detail, "DetailNo", dexNumber(item) .. " · " .. RARITY_NAMES[item.Rarity], 15, {
@@ -382,7 +445,7 @@ local function dexDetail(item: Catalog.Variant, have: boolean, wearing: boolean,
 		TextColor3 = C.Dim,
 		Font = Ui.FontLight,
 	})
-	Ui.label(detail, "DetailDesc", if have then item.Desc else "아직 못 모은 부품이에요. 뽑기에서 나와요.", 16, {
+	Ui.label(detail, "DetailDesc", if have then item.Desc else "아직 못 뽑은 부품이에요. 부품 뽑기에서 나와요.", 16, {
 		Position = UDim2.fromOffset(14, 12 + DEX_DETAIL_ICON + 10),
 		Size = UDim2.fromOffset(DEX_DETAIL_WIDTH - 28, 62),
 		TextXAlignment = Enum.TextXAlignment.Left,
@@ -495,7 +558,7 @@ local function refreshDex()
 		local edge = if wearing then BuildUi.MineColor elseif chosen then C.Text else C.Line
 		local stroke = Ui.stroke(cell, edge, if wearing or chosen then 3 else 1, if wearing or chosen then 0 else 0.4)
 		stroke.Name = "Edge"
-		local icon = PartIcon.make(cell, item, iconSize, not have)
+		local icon = if have then PartIcon.make(cell, item, iconSize) else mystery(cell, iconSize, item.Rarity)
 		icon.AnchorPoint = Vector2.new(0.5, 0)
 		icon.Position = UDim2.new(0.5, 0, 0, iconTop)
 		Ui.label(cell, "No", string.format("%02d", item.No), if big then 14 else 11, {
@@ -539,36 +602,56 @@ local function refreshDex()
 end
 
 function refresh()
-	if not isOpen then
-		return
-	end
-	coinLabel.Text = "보유 코인 " .. Fmt.comma(coins())
-	refreshTabs()
-	refreshInfo()
-	pullArea.Visible = not dexOpen
-	dexArea.Visible = dexOpen
-	if dexOpen then
-		refreshDex()
-	else
+	refreshEquipIcon()
+	if isOpen then
+		coinLabel.Text = "보유 코인 " .. Fmt.comma(coins())
+		refreshTabs(tabs)
 		refreshPull()
+		if os.clock() >= footUntil then
+			footLabel.Text = defaultFoot()
+			footLabel.TextColor3 = if canPull() then C.Dim else C.Red
+		end
 	end
-	if os.clock() >= footUntil then
-		footLabel.Text = defaultFoot()
-		footLabel.TextColor3 = if canPull() then C.Dim else C.Red
+	if equipOpen then
+		refreshTabs(equipTabs)
+		refreshInfo()
+		refreshDex()
 	end
 end
 
+local function askProgress()
+	if progress == nil or progress.owned == nil then
+		Net.event("PartProgress"):FireServer()
+	end
+end
+
+-- 뽑기 창 (열면 내 장비 창은 닫힘)
 local function setOpen(open: boolean)
 	isOpen = open
 	panel.Visible = open
 	if not open then
+		seq += 1
 		resultLayer.Visible = false
 		showingResult = false
-		dexOpen = false
 	else
-		if progress == nil or progress.owned == nil then
-			Net.event("PartProgress"):FireServer()
-		end
+		equipOpen = false
+		equipPanel.Visible = false
+		askProgress()
+		refresh()
+	end
+end
+
+-- 내 장비 창 (열면 뽑기 창은 닫힘). 도감은 지금 부품의 레어도 쪽부터
+local function setEquipOpen(open: boolean)
+	if open and isOpen then
+		setOpen(false)
+	end
+	equipOpen = open
+	equipPanel.Visible = open
+	if open then
+		dexPick = nil
+		dexRarity = partOf(selected)
+		askProgress()
 		refresh()
 	end
 end
@@ -594,6 +677,61 @@ local function shortOutcome(result: any): string
 	return "+" .. shortExp(number(result, "exp", 0)) .. " 경험치"
 end
 
+-- 연출 조각은 다 쓰면 지움
+local function dispose(obj: Instance, seconds: number)
+	task.delay(seconds, function()
+		if obj.Parent then
+			obj:Destroy()
+		end
+	end)
+end
+
+-- 반짝이 하나: (x, y) 에서 angle 쪽으로 dist 만큼 날아가며 돌고 작아지다 사라짐
+local function spark(parent: Instance, color: Color3, x: number, y: number, angle: number, dist: number, size: number, life: number)
+	local dot = Ui.frame(parent, "Spark", {
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromOffset(x, y),
+		Size = UDim2.fromOffset(size, size),
+		Rotation = 45,
+		BackgroundColor3 = color,
+		BackgroundTransparency = 0,
+		ZIndex = 6,
+	})
+	local small = math.max(2, math.floor(size * 0.3))
+	Ui.tween(dot, life, {
+		Position = UDim2.fromOffset(x + math.cos(angle) * dist, y + math.sin(angle) * dist),
+		Size = UDim2.fromOffset(small, small),
+		Rotation = 225,
+		BackgroundTransparency = 1,
+	})
+	dispose(dot, life + 0.05)
+end
+
+-- 퍼지는 빛 고리 하나
+local function ring(parent: Instance, color: Color3, x: number, y: number, from: number, to: number, life: number, thickness: number)
+	local circle = Ui.frame(parent, "Ring", {
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromOffset(x, y),
+		Size = UDim2.fromOffset(from, from),
+		ZIndex = 6,
+	})
+	Ui.corner(circle, to)
+	local stroke = Ui.stroke(circle, color, thickness, 0)
+	Ui.tween(circle, life, { Size = UDim2.fromOffset(to, to) })
+	Ui.tween(stroke, life, { Transparency = 1 })
+	dispose(circle, life + 0.05)
+end
+
+-- 흔들림 단계마다 상자 뒤 빛 색: 1단계 금빛, 2단계는 희귀 이상이 있으면 파랑, 3단계부터 나올 가장 높은 레어도 색
+local function stageColor(stage: number, best: number): Color3
+	if stage <= 1 or best <= 1 then
+		return GOLD
+	elseif stage == 2 then
+		return Catalog.RarityColors[2]
+	end
+	return Catalog.RarityColors[best]
+end
+
 -- 레어도가 높은 카드 뒤에 도는 빛살 (카드와 같은 층의 뒤쪽 형제라서 카드 글자를 가리지 않음)
 local function rays(parent: Instance, color: Color3, x: number, y: number, size: number)
 	local holder = Ui.frame(parent, "Rays", {
@@ -616,7 +754,7 @@ local function rays(parent: Instance, color: Color3, x: number, y: number, size:
 	return holder
 end
 
-local function resultCard(parent: Instance, result: any, x: number, y: number, w: number, h: number, big: boolean): Frame
+local function resultCard(parent: Instance, result: any, x: number, y: number, w: number, h: number, big: boolean, from: Vector2?): Frame
 	local variant = Catalog.get(result.id)
 	local rarity = math.clamp(math.floor(number(result, "rarity", 1)), 1, #RARITY_NAMES)
 	local color = Catalog.RarityColors[rarity]
@@ -633,8 +771,21 @@ local function resultCard(parent: Instance, result: any, x: number, y: number, w
 	card:SetAttribute("Variant", result.id)
 	Ui.corner(card, 12)
 	Ui.stroke(card, color, if rarity >= 3 then 3 else 2, 0)
+	local cx, cy = x + w / 2, y + h / 2
+	local land = if from then FLY_SECONDS else 0
 	if rarity >= 3 then
-		rays(parent, if rarity >= 4 then GOLD else color, x + w / 2, y + h / 2, math.floor(math.max(w, h) * 1.35))
+		-- 영웅 이상: 내려앉으면 뒤에 빛살과 빛 고리 (전설은 반짝이도)
+		task.delay(land, function()
+			if card.Parent then
+				rays(parent, if rarity >= 4 then GOLD else color, cx, cy, math.floor(math.max(w, h) * 1.35))
+				ring(parent, if rarity >= 4 then GOLD else color, cx, cy, math.floor(w * 0.6), math.floor(math.max(w, h) * 1.7), 0.45, 4)
+				if rarity >= 4 then
+					for i = 1, 8 do
+						spark(parent, if i % 2 == 0 then GOLD else C.White, cx, cy, i / 8 * math.pi * 2, math.max(w, h) * 0.9, 10, 0.6)
+					end
+				end
+			end
+		end)
 	end
 	local iconSize = if big then 150 else 72
 	if variant then
@@ -674,13 +825,22 @@ local function resultCard(parent: Instance, result: any, x: number, y: number, w
 		})
 		Ui.corner(tag, 6)
 	end
-	-- 열리는 순간 작게 시작해 튀어나옴
-	local pop = Ui.make("UIScale", { Scale = 0.3, Parent = card })
-	Ui.tween(pop, 0.28, { Scale = 1 }, Enum.EasingStyle.Back)
+	-- 상자 자리에서 작게 날아와 제자리에서 튀어나옴 (from 이 없으면 제자리에서 튀어나옴)
+	local pop = Ui.make("UIScale", { Scale = if from then 0.15 else 0.3, Parent = card })
+	if from then
+		card.Position = UDim2.fromOffset(from.X, from.Y)
+		Ui.tween(card, FLY_SECONDS, { Position = UDim2.fromOffset(cx, cy) })
+		Ui.tween(pop, FLY_SECONDS + 0.05, { Scale = 1 }, Enum.EasingStyle.Back)
+	else
+		Ui.tween(pop, 0.28, { Scale = 1 }, Enum.EasingStyle.Back)
+	end
 	return card
 end
 
 local function showResults(data: any)
+	seq += 1
+	local token = seq
+	local skipped = false
 	clear(resultLayer)
 	resultLayer.Visible = true
 	showingResult = true
@@ -694,24 +854,25 @@ local function showResults(data: any)
 		counts[r] += 1
 		best = math.max(best, r)
 	end
+	-- 제목 색과 레어도별 개수는 카드가 열릴 때 보임 (미리 알려 주지 않음)
 	local title = Ui.label(resultLayer, "ResultTitle", string.format("%s 뽑기 %s", Gacha.typeName(data.typeId),
 		if data.ten then "10회" else "1회"), 26, {
 		Position = UDim2.fromOffset(PAD, 10),
 		Size = UDim2.new(1, -2 * PAD, 0, 34),
 		ZIndex = 2,
 	})
-	title.TextColor3 = rarityText(best)
 	local parts = {}
 	for r = 4, 1, -1 do
 		if counts[r] > 0 then
 			table.insert(parts, string.format("%s %d", RARITY_NAMES[r], counts[r]))
 		end
 	end
-	Ui.label(resultLayer, "ResultCounts", table.concat(parts, " · "), 18, {
+	local countLabel = Ui.label(resultLayer, "ResultCounts", table.concat(parts, " · "), 18, {
 		Position = UDim2.fromOffset(PAD, 44),
 		Size = UDim2.new(1, -2 * PAD, 0, 24),
 		TextColor3 = C.Dim,
 		ZIndex = 2,
+		Visible = false,
 	})
 	local rarity, star, level = partOf(data.typeId)
 	rarity = math.clamp(math.floor(number(data, "rarity", rarity)), 1, 4)
@@ -735,33 +896,33 @@ local function showResults(data: any)
 	})
 	Ui.stroke(okButton, C.White, 2, 0.4)
 	okButton.Activated:Connect(function()
+		seq += 1
 		resultLayer.Visible = false
 		showingResult = false
 		clear(resultLayer)
 		refresh()
 	end)
-	-- 보급 상자가 흔들린 뒤 카드가 열림 (상자 뒤 빛은 이번에 나온 가장 높은 레어도 색)
-	local shell = crateIcon(resultLayer, "Crate", 150, Catalog.RarityColors[best])
-	shell.AnchorPoint = Vector2.new(0.5, 0.5)
-	shell.Position = UDim2.fromScale(0.5, 0.48)
-	shell.ZIndex = 4
-	Ui.tween(shell, SHAKE_SECONDS / 3, { Rotation = 14 }, Enum.EasingStyle.Sine)
-	task.delay(SHAKE_SECONDS / 3, function()
-		if shell.Parent then
-			Ui.tween(shell, SHAKE_SECONDS / 3, { Rotation = -14 }, Enum.EasingStyle.Sine)
-		end
-	end)
-	State.emit("Sound", "ItemUse")
-	task.delay(SHAKE_SECONDS, function()
-		if not showingResult or shell.Parent == nil then
-			return
-		end
-		shell:Destroy()
+
+	-- delay 뒤에 fn (그사이 다시 뽑거나 닫았으면 안 함. intro 는 건너뛰었어도 안 함)
+	local function at(delay: number, fn: () -> (), intro: boolean?)
+		task.delay(delay, function()
+			if token == seq and showingResult and not (intro and skipped) then
+				fn()
+			end
+		end)
+	end
+	local cx, cy = CRATE_CENTER.X, CRATE_CENTER.Y
+	local burstColor = if best >= 2 then Catalog.RarityColors[best] else GOLD
+
+	-- 카드: 상자 자리에서 하나씩 날아 나옴 (fast 면 한꺼번에 제자리에). 다 열리면 확인 버튼
+	local function reveal(fast: boolean)
+		title.TextColor3 = rarityText(best)
+		countLabel.Visible = true
 		local count = #list
-		local width = PANEL_WIDTH
+		local from = if fast then nil else CRATE_CENTER
 		if count <= 1 then
 			if list[1] then
-				resultCard(resultLayer, list[1], width / 2 - 150, 80, 300, 330, true)
+				resultCard(resultLayer, list[1], PANEL_WIDTH / 2 - 150, 80, 300, 330, true, from)
 			end
 		else
 			local perRow = 6
@@ -771,27 +932,143 @@ local function showResults(data: any)
 				local row = math.floor((index - 1) / perRow)
 				local col = (index - 1) % perRow
 				local inRow = math.min(perRow, count - row * perRow)
-				local left = (width - (inRow * w + (inRow - 1) * gap)) / 2
-				task.delay((index - 1) * REVEAL_GAP, function()
-					if showingResult then
-						resultCard(resultLayer, result, left + col * (w + gap), 84 + row * (h + gap), w, h, false)
-					end
-				end)
+				local left = (PANEL_WIDTH - (inRow * w + (inRow - 1) * gap)) / 2
+				local function place()
+					resultCard(resultLayer, result, left + col * (w + gap), 84 + row * (h + gap), w, h, false, from)
+				end
+				if fast then
+					place()
+				else
+					at((index - 1) * REVEAL_GAP, place)
+				end
 			end
 		end
-		task.delay(math.max(count - 1, 0) * REVEAL_GAP + 0.3, function()
-			if not showingResult then
-				return
-			end
+		local done = if fast then 0.3 else math.max(count - 1, 0) * REVEAL_GAP + FLY_SECONDS + 0.15
+		at(done, function()
 			after.Visible = true
 			okButton.Visible = true
 			revealDone = true
 			if resultCheers then
 				(resultCheers :: TextLabel).Visible = true
 			end
-			State.emit("Sound", if best >= 3 then "Combo" else "MissionSuccess")
+			if best >= 3 then
+				State.emit("Sound", "Combo")
+			end
 		end)
+	end
+
+	-- 연출 (건너뛰면 통째로 지움)
+	local intro = Ui.frame(resultLayer, "Intro", { Size = UDim2.fromScale(1, 1), ZIndex = 4 })
+	local glow = Ui.frame(intro, "Glow", {
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromOffset(cx, cy),
+		Size = UDim2.fromOffset(170, 170),
+		BackgroundColor3 = GOLD,
+		BackgroundTransparency = 0.7,
+		ZIndex = 2,
+	})
+	Ui.corner(glow, 400)
+	local shell = crateIcon(intro, "Crate", 150)
+	shell.AnchorPoint = Vector2.new(0.5, 0.5)
+	shell.Position = UDim2.fromOffset(cx, cy)
+	shell.ZIndex = 3
+	local grow = Ui.make("UIScale", { Scale = 0.4, Parent = shell })
+	Ui.tween(grow, APPEAR_SECONDS, { Scale = 1 }, Enum.EasingStyle.Back)
+	Ui.label(intro, "SkipHint", "누르면 바로 열어요", 15, {
+		AnchorPoint = Vector2.new(0.5, 1),
+		Position = UDim2.new(0.5, 0, 1, -18),
+		Size = UDim2.fromOffset(300, 22),
+		TextColor3 = C.Dim,
+		Font = Ui.FontLight,
+		ZIndex = 3,
+	})
+	local skip = Ui.make("TextButton", {
+		Name = "SkipTap",
+		Text = "",
+		AutoButtonColor = false,
+		BackgroundTransparency = 1,
+		Size = UDim2.fromScale(1, 1),
+		ZIndex = 7,
+		Parent = resultLayer,
+	})
+	skip.Activated:Connect(function()
+		if skipped or token ~= seq or not showingResult then
+			return
+		end
+		skipped = true
+		intro:Destroy()
+		skip:Destroy()
+		reveal(true)
 	end)
+
+	-- 1) 세 번 점점 세게 흔들림: 흔들릴 때마다 살짝 뛰고, 뒤 빛이 커지며 색이 한 단계, 반짝이 네 개
+	for k = 1, SHAKES do
+		at(APPEAR_SECONDS + (k - 1) * SHAKE_GAP, function()
+			local amp = 6 + 5 * k
+			local color = stageColor(k, best)
+			Ui.tween(shell, 0.06, { Rotation = amp, Position = UDim2.fromOffset(cx, cy - 4 * k) }, Enum.EasingStyle.Sine)
+			for _, step in ipairs({ { 0.06, -amp, 0.09 }, { 0.15, amp * 0.4, 0.07 }, { 0.22, 0, 0.08 } }) do
+				task.delay(step[1], function()
+					if shell.Parent then
+						Ui.tween(shell, step[3], { Rotation = step[2], Position = UDim2.fromOffset(cx, cy) }, Enum.EasingStyle.Sine)
+					end
+				end)
+			end
+			local size = 170 + 45 * k
+			Ui.tween(glow, 0.2, { Size = UDim2.fromOffset(size, size), BackgroundColor3 = color, BackgroundTransparency = 0.7 - 0.12 * k })
+			for i = 1, 4 do
+				local angle = (i / 4 + k * 0.13) * math.pi * 2
+				spark(intro, if i % 2 == 0 then color else GOLD, cx, cy, angle, 90 + 25 * k, 8 + 2 * k, 0.45)
+			end
+			State.emit("Sound", "Press")
+		end, true)
+	end
+
+	-- 2) 빛이 모임: 빛이 커지고 진해지며 상자가 부풀고, 바깥 반짝이가 가운데로 빨려 듦 (희귀 이상은 빛살)
+	local chargeAt = APPEAR_SECONDS + SHAKES * SHAKE_GAP
+	at(chargeAt, function()
+		Ui.tween(glow, CHARGE_SECONDS, { Size = UDim2.fromOffset(420, 420), BackgroundColor3 = burstColor, BackgroundTransparency = 0.2 })
+		Ui.tween(grow, CHARGE_SECONDS, { Scale = 1.18 })
+		if best >= 2 then
+			rays(intro, burstColor, cx, cy, 520).Name = "ChargeRays"
+		end
+		if best >= 4 then
+			local more = rays(intro, GOLD, cx, cy, 600)
+			more.Name = "ChargeRays"
+			more.Rotation = 22.5
+		end
+		for i = 1, 8 do
+			local angle = i / 8 * math.pi * 2
+			spark(intro, burstColor, cx + math.cos(angle) * 260, cy + math.sin(angle) * 260, angle + math.pi, 220, 12, CHARGE_SECONDS)
+		end
+		State.emit("Sound", "ItemUse")
+	end, true)
+
+	-- 3) 터짐: 번쩍 + 빛 고리 + 반짝이(레어도가 높을수록 많이) 뒤 카드가 날아 나옴
+	at(chargeAt + CHARGE_SECONDS, function()
+		intro:Destroy()
+		skip:Destroy()
+		local flash = Ui.frame(resultLayer, "Flash", {
+			Size = UDim2.fromScale(1, 1),
+			BackgroundColor3 = C.White,
+			BackgroundTransparency = 0.15,
+			ZIndex = 6,
+		})
+		Ui.corner(flash, 12)
+		Ui.tween(flash, 0.4, { BackgroundTransparency = 1 })
+		dispose(flash, 0.45)
+		ring(resultLayer, burstColor, cx, cy, 120, 760, 0.5, 6)
+		if best >= 3 then
+			ring(resultLayer, GOLD, cx, cy, 80, 560, 0.6, 4)
+		end
+		local sparks = ({ 12, 14, 20, 28 })[best]
+		for i = 1, sparks do
+			local color = if i % 3 == 0 then GOLD elseif i % 3 == 1 then burstColor else C.White
+			spark(resultLayer, color, cx, cy, math.random() * math.pi * 2, 180 + math.random() * 220, 10 + math.random() * 8, 0.6 + math.random() * 0.3)
+		end
+		State.emit("Sound", "MissionSuccess")
+		reveal(false)
+	end, true)
 end
 
 -- ------------------------------------------------------------ 전설 알림
@@ -841,16 +1118,25 @@ local function showNews(data: any)
 end
 
 -- ------------------------------------------------------------ 만들기
-local function buildButton()
-	openButton = Ui.button(root, "GachaButton", "부품 뽑기", 20, C.Purple, {
+-- 오른쪽 메뉴 버튼 (부품 뽑기·내 장비): 왼쪽에 작은 그림, 글자는 그림 오른쪽 칸의 가운데
+-- (Nick 11-28 "우측에 폰트 정렬 이상": 전에는 글자가 버튼 오른쪽 끝에 붙어 있었음)
+local function menuButton(name: string, text: string, top: number, color: Color3, edge: Color3): TextButton
+	local button = Ui.button(root, name, "", 20, color, {
 		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, -16, 0, BUTTON_TOP),
+		Position = UDim2.new(1, -16, 0, top),
 		Size = UDim2.fromOffset(BUTTON_WIDTH, BUTTON_HEIGHT),
 		Visible = false,
 	})
-	Ui.stroke(openButton, GOLD, 2, 0.2)
-	openButton.TextXAlignment = Enum.TextXAlignment.Right
-	Ui.make("UIPadding", { PaddingRight = UDim.new(0, 14), Parent = openButton })
+	Ui.stroke(button, edge, 2, 0.2)
+	Ui.label(button, "Label", text, 20, {
+		Position = UDim2.fromOffset(46, 0),
+		Size = UDim2.new(1, -52, 1, 0),
+	})
+	return button
+end
+
+local function buildButtons()
+	openButton = menuButton("GachaButton", "부품 뽑기", BUTTON_TOP, C.Purple, GOLD)
 	-- 왼쪽에 작은 보급 상자
 	local icon = crateIcon(openButton, "GachaIcon", 34)
 	icon.AnchorPoint = Vector2.new(0, 0.5)
@@ -859,47 +1145,44 @@ local function buildButton()
 		State.emit("Sound", "Press")
 		setOpen(not isOpen)
 	end)
+	-- 내 장비 (Nick 11-28 "장비창도 우측에 메뉴 만들어줘"): 그림은 내 엔진 모양
+	equipButton = menuButton("EquipButton", "내 장비", EQUIP_TOP, BuildUi.MineColor:Lerp(DARK, 0.55), BuildUi.MineColor)
+	equipIconSlot = Ui.frame(equipButton, "EquipIcon", {
+		AnchorPoint = Vector2.new(0, 0.5),
+		Position = UDim2.new(0, 8, 0.5, 0),
+		Size = UDim2.fromOffset(34, 34),
+	})
+	equipButton.Activated:Connect(function()
+		State.emit("Sound", "Press")
+		setEquipOpen(not equipOpen)
+	end)
 end
 
-local function buildPanel()
-	panel = Ui.panel(root, "GachaPanel", {
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.fromScale(0.5, 0.5),
-		Size = UDim2.fromOffset(PANEL_WIDTH, PANEL_HEIGHT),
-		BackgroundTransparency = 0,
-		Visible = false,
-	})
-	Ui.stroke(panel, GOLD, 2, 0.3)
-	Ui.label(panel, "Title", "부품 뽑기", 26, {
+-- 창 제목과 닫기 버튼
+local function titleBar(parent: Frame, title: string, color: Color3, closeName: string, onClose: () -> ())
+	Ui.label(parent, "Title", title, 26, {
 		Position = UDim2.fromOffset(PAD, 8),
 		Size = UDim2.fromOffset(200, 40),
 		TextXAlignment = Enum.TextXAlignment.Left,
-		TextColor3 = GOLD,
+		TextColor3 = color,
 	})
-	coinLabel = Ui.label(panel, "Coins", "", 20, {
-		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, -150, 0, 10),
-		Size = UDim2.fromOffset(360, 36),
-		TextXAlignment = Enum.TextXAlignment.Right,
-		TextColor3 = C.Yellow,
-	})
-	local close = Ui.button(panel, "GachaClose", "닫기", 20, C.PanelLight, {
+	local close = Ui.button(parent, closeName, "닫기", 20, C.PanelLight, {
 		AnchorPoint = Vector2.new(1, 0),
 		Position = UDim2.new(1, -PAD, 0, 6),
 		Size = UDim2.fromOffset(120, 44),
 		Modal = true, -- 열려 있는 동안은 마우스가 풀려 있음
 	})
 	Ui.stroke(close, C.Line, 2, 0)
-	close.Activated:Connect(function()
-		setOpen(false)
-	end)
+	close.Activated:Connect(onClose)
+end
 
-	-- 부품 종류 탭
+-- 부품 종류 탭 6개 (두 창이 고른 종류를 같이 씀). 탭 아래 줄은 그 종류 지금 부품의 레어도·★
+local function buildTabs(parent: Frame, prefix: string, store: { [string]: Tab })
 	local types = Config.Parts.Types
 	local tabWidth = (PANEL_WIDTH - 2 * PAD - (#types - 1) * 8) / #types
 	for index, info in ipairs(types) do
 		local style = BuildUi.TypeStyle[info.Id] or { Color = C.Cyan }
-		local button = Ui.button(panel, "GachaTab_" .. info.Id, "", 18, C.Panel, {
+		local button = Ui.button(parent, prefix .. info.Id, "", 18, C.Panel, {
 			Position = UDim2.fromOffset(PAD + (index - 1) * (tabWidth + 8), TAB_TOP),
 			Size = UDim2.fromOffset(tabWidth, TAB_HEIGHT),
 		})
@@ -923,61 +1206,31 @@ local function buildPanel()
 				refresh()
 			end
 		end)
-		tabs[info.Id] = { button = button, sub = sub, stroke = stroke }
+		store[info.Id] = { button = button, sub = sub, stroke = stroke }
 	end
+end
 
-	-- 현재 장착 중 (판 맨 아래, 오른쪽 끝에 도감 버튼)
-	local info = Ui.frame(panel, "Current", {
-		Position = UDim2.fromOffset(PAD, INFO_TOP),
-		Size = UDim2.new(1, -2 * PAD, 0, INFO_HEIGHT),
-		BackgroundColor3 = C.PanelLight,
-		BackgroundTransparency = 0.4,
-	})
-	Ui.corner(info, 10)
-	infoIconSlot = Ui.frame(info, "IconSlot", {
-		Position = UDim2.fromOffset(8, 8),
-		Size = UDim2.fromOffset(76, 76),
-	})
-	local equipped = Ui.label(info, "EquippedTag", "현재 장착 중", 15, {
-		Position = UDim2.fromOffset(98, 9),
-		Size = UDim2.fromOffset(104, 24),
-		BackgroundColor3 = BuildUi.MineColor,
+-- 뽑기 창: 종류 탭 → 뽑기 하나 → 안내 글 (장비·도감은 내 장비 창)
+local function buildPanel()
+	panel = Ui.panel(root, "GachaPanel", {
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
+		Size = UDim2.fromOffset(PANEL_WIDTH, GACHA_HEIGHT),
 		BackgroundTransparency = 0,
-		TextColor3 = DARK,
-		TextStrokeTransparency = 1,
+		Visible = false,
 	})
-	Ui.corner(equipped, 8)
-	infoName = Ui.label(info, "PartName", "", 24, {
-		Position = UDim2.fromOffset(212, 6),
-		Size = UDim2.new(1, -412, 0, 30),
-		TextXAlignment = Enum.TextXAlignment.Left,
-		TextTruncate = Enum.TextTruncate.AtEnd,
-	})
-	infoLine = Ui.label(info, "PartLine", "", 18, {
-		Position = UDim2.fromOffset(98, 36),
-		Size = UDim2.new(1, -300, 0, 24),
-		TextXAlignment = Enum.TextXAlignment.Left,
-	})
-	infoHint = Ui.label(info, "PartHint", "", 15, {
-		Position = UDim2.fromOffset(98, 62),
-		Size = UDim2.new(1, -110, 0, 22),
-		TextXAlignment = Enum.TextXAlignment.Left,
-		TextTruncate = Enum.TextTruncate.AtEnd,
-		Font = Ui.FontLight,
-	})
-	dexButton = Ui.button(info, "DexButton", "도감", 18, C.Panel, {
-		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, -10, 0, 10),
-		Size = UDim2.fromOffset(180, 44),
-	})
-	Ui.stroke(dexButton, BuildUi.MineColor, 2, 0.2)
-	dexButton.Activated:Connect(function()
-		dexOpen = not dexOpen
-		dexPick = nil
-		dexRarity = partOf(selected)
-		State.emit("Sound", "Press")
-		refresh()
+	Ui.stroke(panel, GOLD, 2, 0.3)
+	titleBar(panel, "부품 뽑기", GOLD, "GachaClose", function()
+		setOpen(false)
 	end)
+	coinLabel = Ui.label(panel, "Coins", "", 20, {
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, -150, 0, 10),
+		Size = UDim2.fromOffset(360, 36),
+		TextXAlignment = Enum.TextXAlignment.Right,
+		TextColor3 = C.Yellow,
+	})
+	buildTabs(panel, "GachaTab_", tabs)
 
 	-- 뽑기 (하나): 왼쪽 보급 상자와 확률, 오른쪽 1회·10회 버튼과 값 설명
 	pullArea = Ui.frame(panel, "PullArea", {
@@ -1086,29 +1339,108 @@ local function buildPanel()
 		press(true)
 	end)
 
-	-- 도감
-	dexArea = Ui.frame(panel, "Dex", {
-		Position = UDim2.fromOffset(0, BODY_TOP),
-		Size = UDim2.new(1, 0, 0, BODY_HEIGHT),
-		Visible = false,
-	})
-
 	footLabel = Ui.label(panel, "Foot", "", 16, {
 		Position = UDim2.fromOffset(PAD, FOOT_TOP),
-		Size = UDim2.new(1, -2 * PAD, 0, FOOT_HEIGHT),
+		Size = UDim2.new(1, -2 * PAD, 0, GACHA_FOOT_HEIGHT),
 		TextColor3 = C.Dim,
 		TextWrapped = true,
 	})
+end
 
-	-- 결과 (판 전체를 덮음)
-	resultLayer = Ui.frame(panel, "GachaResult", {
-		Size = UDim2.fromScale(1, 1),
+-- 내 장비 창: 종류 탭 → 그 종류 도감 → 안내 글 → 맨 아래 현재 장착 중
+local function buildEquipPanel()
+	equipPanel = Ui.panel(root, "EquipPanel", {
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
+		Size = UDim2.fromOffset(PANEL_WIDTH, PANEL_HEIGHT),
+		BackgroundTransparency = 0,
+		Visible = false,
+	})
+	Ui.stroke(equipPanel, BuildUi.MineColor, 2, 0.3)
+	titleBar(equipPanel, "내 장비", BuildUi.MineColor, "EquipClose", function()
+		setEquipOpen(false)
+	end)
+	buildTabs(equipPanel, "EquipTab_", equipTabs)
+	dexArea = Ui.frame(equipPanel, "Dex", {
+		Position = UDim2.fromOffset(0, BODY_TOP),
+		Size = UDim2.new(1, 0, 0, BODY_HEIGHT),
+	})
+	Ui.label(equipPanel, "EquipFoot",
+		"같은 레어도로 모은 부품은 '이 모양으로 바꾸기'로 모양만 바꿔 낄 수 있어요 (능력치는 같아요)", 16, {
+			Position = UDim2.fromOffset(PAD, FOOT_TOP),
+			Size = UDim2.new(1, -2 * PAD, 0, FOOT_HEIGHT),
+			TextColor3 = C.Dim,
+			TextWrapped = true,
+		})
+
+	-- 현재 장착 중 (맨 아래): 아이콘·이름·레어도·★·레벨·설명, 오른쪽에 경험치 막대
+	local info = Ui.frame(equipPanel, "Current", {
+		Position = UDim2.fromOffset(PAD, INFO_TOP),
+		Size = UDim2.new(1, -2 * PAD, 0, INFO_HEIGHT),
+		BackgroundColor3 = C.PanelLight,
+		BackgroundTransparency = 0.4,
+	})
+	Ui.corner(info, 10)
+	infoIconSlot = Ui.frame(info, "IconSlot", {
+		Position = UDim2.fromOffset(8, 8),
+		Size = UDim2.fromOffset(76, 76),
+	})
+	local equipped = Ui.label(info, "EquippedTag", "현재 장착 중", 15, {
+		Position = UDim2.fromOffset(98, 9),
+		Size = UDim2.fromOffset(104, 24),
+		BackgroundColor3 = BuildUi.MineColor,
+		BackgroundTransparency = 0,
+		TextColor3 = DARK,
+		TextStrokeTransparency = 1,
+	})
+	Ui.corner(equipped, 8)
+	infoName = Ui.label(info, "PartName", "", 24, {
+		Position = UDim2.fromOffset(212, 6),
+		Size = UDim2.new(1, -(212 + EXP_WIDTH + 24), 0, 30),
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextTruncate = Enum.TextTruncate.AtEnd,
+	})
+	infoLine = Ui.label(info, "PartLine", "", 18, {
+		Position = UDim2.fromOffset(98, 36),
+		Size = UDim2.new(1, -(98 + EXP_WIDTH + 24), 0, 24),
+		TextXAlignment = Enum.TextXAlignment.Left,
+	})
+	infoHint = Ui.label(info, "PartHint", "", 15, {
+		Position = UDim2.fromOffset(98, 62),
+		Size = UDim2.new(1, -110, 0, 22),
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextTruncate = Enum.TextTruncate.AtEnd,
+		Font = Ui.FontLight,
+	})
+	infoExpText = Ui.label(info, "ExpText", "", 15, {
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, -12, 0, 12),
+		Size = UDim2.fromOffset(EXP_WIDTH, 22),
+		TextXAlignment = Enum.TextXAlignment.Right,
+		TextColor3 = C.Dim,
+		Font = Ui.FontLight,
+	})
+	local _, fill = Ui.bar(info, "ExpBar", BuildUi.MineColor, {
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, -12, 0, 40),
+		Size = UDim2.fromOffset(EXP_WIDTH, 10),
+	})
+	infoExpFill = fill
+end
+
+-- 뽑기 결과 화면: 뽑기 창 위를 덮는 따로 된 판 (뽑기 창보다 커서 연출과 카드 11장이 넉넉히 들어감)
+local function buildResultLayer()
+	resultLayer = Ui.frame(root, "GachaResult", {
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
+		Size = UDim2.fromOffset(PANEL_WIDTH, PANEL_HEIGHT),
 		BackgroundColor3 = DARK,
 		BackgroundTransparency = 0.04,
 		ZIndex = 5,
 		Visible = false,
 	})
 	Ui.corner(resultLayer, 12)
+	Ui.stroke(resultLayer, GOLD, 2, 0.3)
 end
 
 local function buildNews()
@@ -1193,8 +1525,10 @@ end
 function GachaUi.init()
 	local _, base = Ui.screen("RoflyGacha", 16)
 	root = base
-	buildButton()
+	buildButtons()
 	buildPanel()
+	buildEquipPanel()
+	buildResultLayer()
 	buildNews()
 	Net.event("PartProgress").OnClientEvent:Connect(onProgress)
 	Net.event("GachaResult").OnClientEvent:Connect(onResult)
@@ -1212,8 +1546,13 @@ function GachaUi.init()
 		if phase == "Results" then
 			resultsAt = os.clock()
 		end
-		if not Gacha.open(tostring(phase)) and isOpen then
-			setOpen(false)
+		if not Gacha.open(tostring(phase)) then
+			if isOpen then
+				setOpen(false)
+			end
+			if equipOpen then
+				setEquipOpen(false)
+			end
 		end
 	end)
 	player:GetAttributeChangedSignal("Coins"):Connect(refresh)
@@ -1225,8 +1564,14 @@ function GachaUi.update(_dt: number)
 	local phase = State.phase()
 	local show = Gacha.open(phase) and (phase ~= "Results" or os.clock() - resultsAt >= G.ResultsDelay)
 	openButton.Visible = show
-	if isOpen and not Gacha.open(phase) then
-		setOpen(false)
+	equipButton.Visible = show
+	if not Gacha.open(phase) then
+		if isOpen then
+			setOpen(false)
+		end
+		if equipOpen then
+			setEquipOpen(false)
+		end
 	end
 	if pending and os.clock() - pendingAt > PENDING_TIMEOUT then
 		pending = false
