@@ -24,6 +24,8 @@
     {"name": "ItemUse", "config": "Config.Sounds.ItemUse", "use": "부스터를 쓸 때", "duration": 1.2,
      "prompt": "Sci-fi power up activation, energy charging whoosh with bright shimmer, game booster sound"},
     {"name": "Coin", "config": "Config.CoinFx.SoundId", "use": "비행 중 코인이 들어올 때 (빠르게 여러 번)", "duration": 0.5, "maxLength": 0.35,
-     "prompt": "Single bright coin pickup ting, short sparkling metallic chime, game coin collect"}
+     "prompt": "Single bright coin pickup ting, short sparkling metallic chime, game coin collect"},
+    {"name": "LevelUp", "config": "Config.Sounds.LevelUp", "use": "내 부품 레벨업 (초반엔 비행 내내 자주, 갈수록 드물게. 오랜만에 오르면 크게)", "duration": 1, "maxLength": 0.7,
+     "prompt": "Quick magical level up chime, short rising sparkle arpeggio ending on a bright bell ding, light and satisfying, mobile game reward"}
   ]
 }
