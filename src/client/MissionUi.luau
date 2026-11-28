@@ -800,7 +800,7 @@ local function updateTap(dt: number)
 end
 
 function MissionUi.update(_dt: number)
-	local flying = State.phase() == "Flight"
+	local flying = State.flying() -- 충격파에 잡히면(엔딩) 남은 미션 판을 바로 닫음
 	local crew = State.role() == "Crew"
 
 	local m = mission

@@ -222,7 +222,7 @@ function BoosterMenu.init()
 end
 
 function BoosterMenu.update(_dt: number)
-	local show = State.phase() == "Flight" and State.role() == "Crew"
+	local show = State.flying() and State.role() == "Crew" -- 충격파에 잡히면(엔딩) 바로 숨김
 	menu.Visible = show
 	if not show then
 		tooltip.Visible = false

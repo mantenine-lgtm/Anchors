@@ -1,7 +1,7 @@
 -- 배경 연출. 로켓은 제자리에 있고 배경이 움직여서 날아가는 것처럼 보입니다.
 -- 선실 외창 너머로 보이는 것과 바깥 시점에서 보이는 것은 모두 같은 물체입니다(시점마다 따로 두지 않음).
 --  · 발사 행성과 발사장은 Planet.luau 가 움직임. 고향 하늘(1단계) 빛은 판마다 바뀌는 행성의 하늘(Planets.luau)
---  · 충격파: 아래에서 올라오는 빛나는 판. 도달 예상 시간이 줄수록 가까이 옴
+--  · 충격파: 아래에서 올라오는 빛나는 판. 도달 예상 시간이 줄수록 가까이 옴. 잡힌 뒤(엔딩·정산)에는 로켓 꼬리 높이에 머묾
 --  · 대기권(100 km까지): 마찰로 코와 외창 바깥면이 빨갛게 달아오름(빠를수록 셈). 화면 흔들림은 CameraRig
 --  · 별빛 줄기: 대기권을 벗어난 뒤에만, 속도가 빠를수록 빠르게 아래로 흐름 (발사 전에는 천천히 떠오르는 불티)
 --  · 하늘: 스테이지마다 빛과 안개 색이 바뀜, 폭풍 구름층에서는 번개
@@ -422,6 +422,8 @@ function Backdrop.update(dt: number)
 	local phase = State.phase()
 	local clock = os.clock()
 	local flying = phase == "Flight"
+	local moving = State.flying() -- 비행 중이고 아직 잡히지 않음 (엔딩 동안은 정산처럼 멈춘 듯이)
+	local endingView = State.caught() and State.aboard() -- 잡힌 판의 엔딩·정산을 바깥 엔딩 카메라로 보는 중
 	local f = State.flight
 	local crisis = flying and State.flag("Crisis")
 
@@ -429,7 +431,7 @@ function Backdrop.update(dt: number)
 	local stage = if flying or phase == "Results" then math.min(Route.stageIndex(f.km), #SKIES) else 1
 	blendSky(if stage == 1 then homeSky() else SKIES[stage], math.min(1, dt * 0.9))
 	local flashBoost = 0
-	if flying and stage == 2 then
+	if moving and stage == 2 then
 		if clock >= nextLightning then
 			nextLightning = clock + 2.5 + random:NextNumber() * 4
 			lightningUntil = clock + 0.14
@@ -443,13 +445,13 @@ function Backdrop.update(dt: number)
 	applySky(flashBoost, crisisPulse)
 	setAlarm(crisis and math.floor(clock * 4) % 2 == 0)
 
-	-- 마찰 열 (대기권 안에서 빠를수록)
-	applyHeat(State.heat, clock)
+	-- 마찰 열 (대기권 안에서 빠를수록). 엔딩에서 로켓이 터져 숨겨지면 바로 끔
+	applyHeat(if State.wrecked then 0 else State.heat, clock)
 
 	-- 빛줄기의 흐름 빠르기 (구름도 씀)
 	local speedStuds: number
 	local length: number
-	if flying then
+	if moving then
 		local metersPerSecond = f.speed * 1000
 		speedStuds = 60 + 140 * math.log10(1 + metersPerSecond / 5)
 		if clock < boostUntil then
@@ -459,8 +461,8 @@ function Backdrop.update(dt: number)
 			speedStuds *= 1.8
 		end
 		length = math.clamp(speedStuds * 0.09, 6, 44)
-	elseif phase == "Results" then
-		-- 정산: 천천히 흐르는 별
+	elseif flying or phase == "Results" then
+		-- 엔딩·정산: 천천히 흐르는 별
 		speedStuds = 8
 		length = 2.2
 	else
@@ -529,7 +531,8 @@ function Backdrop.update(dt: number)
 	end
 	local span = STREAK_TOP - STREAK_BOTTOM
 	for _, cloud in ipairs(clouds) do
-		local visible = if flying then sky.Clouds else 0
+		-- 엔딩에서는 구름 공이 카메라와 터지는 로켓 사이에 머물러 가리지 않게 숨김
+		local visible = if flying and not endingView then sky.Clouds else 0
 		local part = cloud.part
 		if visible <= 0.02 then
 			part.Transparency = 1
@@ -550,7 +553,13 @@ function Backdrop.update(dt: number)
 	-- 위기(10초 이내)에는 로켓 밑동 아래에서 선실 바닥까지(선실 외창에 보임), 그 전에는 바깥 시점 화면 아래 끝에서 로켓 밑동까지
 	local targetY = WAVE_FAR_Y
 	local waveVisible = false
-	if flying then
+	local snap = false
+	if endingView then
+		-- 잡힘(엔딩·정산): 엔딩 카메라에서 로켓 꼬리에 닿은 빛나는 면으로 보이게 꼬리 바로 아래에 둠 (카메라보다 낮게)
+		waveVisible = true
+		targetY = Config.Ending.WaveY
+		snap = true
+	elseif flying then
 		waveVisible = true
 		local eta = math.clamp(State.number("Eta"), 0, Config.Crisis.EtaLimit)
 		local below = if eta <= 10 then eta * 23.4 else 234 + (eta - 10) * 51.8
@@ -562,7 +571,11 @@ function Backdrop.update(dt: number)
 	end
 	if waveVisible then
 		local rate = if phase == "Results" then 2.2 else 3
-		waveY += (targetY - waveY) * math.min(1, dt * rate)
+		if snap then
+			waveY = targetY
+		else
+			waveY += (targetY - waveY) * math.min(1, dt * rate)
+		end
 		wave.Transparency = 0.12
 		wave.CFrame = CFrame.new(0, waveY, 0) * CFrame.Angles(0, 0, math.rad(90))
 	else

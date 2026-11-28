@@ -16,7 +16,8 @@ ReplicatedStorage:WaitForChild(Net.StateName)
 
 local State = require(script.Parent:WaitForChild("State"))
 
-local MODULE_NAMES = { "Sfx", "Hud", "BuildUi", "CaptainAlert", "MissionUi", "BoosterMenu", "CoinFx", "Board", "PartsBoard", "GachaUi", "MyParts", "CameraRig", "Planet", "PlanetSlot", "Backdrop", "Exhaust", "FeverFx", "HaloFx", "PlanetMood", "DebugPanel" }
+-- 매 프레임 이 순서로 update. Ending 은 CameraRig·Backdrop 보다 먼저 (로켓이 터지는 그 프레임에 흔들림과 마찰 열 빛 끄기가 바로 맞게)
+local MODULE_NAMES = { "Sfx", "Hud", "BuildUi", "CaptainAlert", "MissionUi", "BoosterMenu", "CoinFx", "Board", "PartsBoard", "GachaUi", "MyParts", "Ending", "CameraRig", "Planet", "PlanetSlot", "Backdrop", "Exhaust", "FeverFx", "HaloFx", "PlanetMood", "DebugPanel" }
 
 type Entry = { name: string, module: any, warned: boolean }
 local entries: { Entry } = {}

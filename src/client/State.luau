@@ -50,6 +50,22 @@ function State.onChange(name: string, callback: () -> ()): RBXScriptConnection
 	return folder:GetAttributeChangedSignal(name):Connect(callback)
 end
 
+-- 충격파에 잡힌 서버 시각 (잡히지 않았으면 0). 잡히면 서버가 비행 페이즈를 Config.Ending.Seconds 만큼 더 두고(엔딩) 정산으로 넘어감
+function State.caughtAt(): number
+	return State.number("CaughtAt")
+end
+
+-- 충격파에 잡혀 비행이 끝난 판의 엔딩(아직 페이즈 "Flight")과 정산 동안 true. 탈출한 판은 false
+function State.caught(): boolean
+	local phase = State.phase()
+	return (phase == "Flight" or phase == "Results") and State.number("CaughtAt") > 0
+end
+
+-- 비행이 진행 중인지 (비행 페이즈이고 아직 잡히지 않음. 엔딩 동안은 false)
+function State.flying(): boolean
+	return State.phase() == "Flight" and State.number("CaughtAt") <= 0
+end
+
 -- 서버 시각 (서버와 클라이언트가 같은 값을 봄)
 function State.now(): number
 	return Workspace:GetServerTimeNow()
@@ -174,6 +190,9 @@ State.boardBottom = State.BoardBottomDefault
 -- 방향키·WASD·스페이스가 미션 입력으로만 쓰이고, 터치 기기는 이동 스틱 대신 미션 버튼을 보여 줍니다.
 State.missionInput = false
 
+-- 엔딩에서 로켓이 터져 로켓·탄 사람을 내 화면에서 숨긴 동안 true (Ending 이 맞춤). Backdrop 은 이때 선체 마찰 열 빛을 끔
+State.wrecked = false
+
 -- ------------------------------------------------------------ 부드러운 비행 값
 -- 서버는 0.1초마다 값을 보내므로, 화면에는 그 사이를 이어서 보여 줍니다.
 State.flight = {
@@ -185,7 +204,8 @@ State.flight = {
 
 local function updateFlight(dt: number)
 	local f = State.flight
-	if State.phase() ~= "Flight" then
+	if not State.flying() then
+		-- 비행 전·엔딩·정산: 서버 값 그대로 (엔딩 동안 마지막 속도로 계속 가는 것처럼 보이지 않게)
 		f.km = State.number("Km")
 		f.speed = State.number("Speed")
 		f.waveKm = State.number("WaveKm")
@@ -220,7 +240,7 @@ State.heat = 0
 function State.update(dt: number)
 	updateFlight(dt)
 	local f = State.flight
-	local target = if State.phase() == "Flight" then Route.heat(f.km, f.speed) else 0
+	local target = if State.flying() then Route.heat(f.km, f.speed) else 0
 	State.heat += (target - State.heat) * math.min(1, dt * 1.5)
 end
 

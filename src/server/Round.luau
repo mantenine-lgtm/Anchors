@@ -186,6 +186,7 @@ local function resetFlightState()
 	end
 	state:SetAttribute("GoldenFromKm", -1) -- 황금 항로를 쓴 지점 (안 썼으면 -1)
 	state:SetAttribute("Escaped", false)
+	state:SetAttribute("CaughtAt", 0) -- 충격파에 잡힌 서버 시각 (잡히지 않았으면 0). 엔딩 연출이 이 시각을 기준으로 돎
 	state:SetAttribute("FeverCount", 0) -- 지금 피버 중인 부품 수 (로켓 전체)
 	state:SetAttribute("FeverParts", 0) -- 피버를 뽑은 부품 수 (로켓에 꽂힌 부품 전체)
 	state:SetAttribute("FeverBonus", 0) -- 부품 피버로 빨라진 비율 (0.13 = 속도 +13%)
@@ -947,6 +948,8 @@ local function runFlight(round: any)
 	hideFever(round)
 	state:SetAttribute("Crisis", false)
 	state:SetAttribute("Escaped", sim.escaped)
+	-- 탈출이 아니면 충격파에 잡힘 (디버그 건너뛰기·시간 한도도 같음): 엔딩이 시작된 시각
+	state:SetAttribute("CaughtAt", if sim.escaped then 0 else now())
 	Net.event("FlightEnd"):FireAllClients({
 		escaped = sim.escaped,
 		km = sim.x,
@@ -1265,6 +1268,15 @@ local function runResults(round: any)
 	waitPhase(Config.Phase.Results)
 end
 
+-- 엔딩: 충격파에 잡혔으면 모두가 로켓이 터지는 장면(client/Ending.luau)을 보도록 정산을 Config.Ending.Seconds 만큼 늦춤.
+-- 페이즈는 비행 그대로 두고(미션·부스터는 이미 끝남), 탈출했으면 바로 정산. 디버그 "건너뛰기"로 일찍 끝낼 수 있음
+local function runEnding(round: any)
+	if round.sim == nil or round.sim.escaped then
+		return
+	end
+	waitPhase(Config.Ending.Seconds)
+end
+
 -- 판 정리: 탑승 자리·봇을 치우고 모두 발사장으로
 local function cleanup()
 	current = nil
@@ -1300,6 +1312,7 @@ local function runRound()
 	end
 	runCountdown(round)
 	runFlight(round)
+	runEnding(round)
 	runResults(round)
 	cleanup()
 end

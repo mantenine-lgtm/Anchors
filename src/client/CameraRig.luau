@@ -3,6 +3,7 @@
 --    관전자는 천장 가까이 떠 있는 자리에서 둘러봅니다. 카메라는 선실 벽 너머로 멀어지지 않게 최대 거리를 줄입니다.
 --  · 바깥 시점: 오른쪽 위 '시점' 버튼으로 바꾸는 연출 카메라 (로켓을 밖에서 봄)
 --  · 클로즈업: 카운트다운 시작 때 선장, 부스터를 쓴 사람을 잠깐 비춤 (그 사람이 선실 어디에 있든 따라감)
+--  · 엔딩: 충격파에 잡히면 정산이 끝날 때까지 모두 바깥 엔딩 카메라로 강제로 옮김 (시점 버튼 숨김, 조작 잠금. 폭발은 Ending.luau)
 -- 승무원은 내 미션 입력을 받는 동안만 걷기·점프가 잠기고(방향키·스페이스가 미션 입력이 되도록), 관전자는 늘 잠깁니다.
 -- 타 있는 동안은 캐릭터 초기화 버튼을 막습니다.
 
@@ -31,6 +32,7 @@ local HANDOVER_MAX = 20 -- 새 캐릭터를 기다리며 발사장을 비추는 
 local CLOSEUP_DISTANCE = 9 -- 클로즈업 카메라가 그 사람 머리에서 떨어진 거리(스터드)
 local OFFSET_SHAKE = 12 -- 선실 시점(기본 카메라)의 흔들림: 연출 카메라의 흔들림 각도(라디안)를 이 거리(스터드)만큼 옮겨 비슷하게 보임
 local ROCKET_CENTER = Vector3.new(0, 128, 0) -- 바깥 시점에서 조명 초점을 맞추는 곳 (로켓 가운데쯤)
+local ENDING_SHAKE = 1.5 -- 엔딩에서 로켓이 터지는 순간의 흔들림
 
 local view = "Interior" -- "Interior" 선실 | "Exterior" 바깥
 local managed = false -- 타 있는 동안 이 모듈이 카메라를 맡고 있음 (내리면 판 끝 넘기기를 거쳐 기본 카메라로 돌려줌)
@@ -168,6 +170,19 @@ local function exteriorCFrame(): CFrame
 	return CFrame.lookAt(Vector3.new(at[1], at[2], at[3]), Vector3.new(0, at[4], 0))
 end
 
+-- 엔딩 카메라: 바깥 시점과 같은 쪽에서 조금 더 멀리, 로켓 전체와 그 아래 충격파 면이 함께 보이게 (Config.Ending.Camera).
+-- 잡힌 순간부터 엔딩이 끝날 때까지 천천히 물러나고(PullBack), 정산 동안은 가장 물러난 자리에 머묾
+local function endingCFrame(): CFrame
+	local E = Config.Ending
+	local at = E.Camera
+	local look = Vector3.new(0, at[4], 0)
+	local elapsed = math.max(0, State.now() - State.caughtAt())
+	local u = math.clamp(elapsed / math.max(E.Seconds, 0.1), 0, 1)
+	local back = 1 + E.PullBack * (1 - (1 - u) * (1 - u))
+	local eye = look + (Vector3.new(at[1], at[2], at[3]) - look) * back
+	return CFrame.lookAt(eye, look)
+end
+
 -- 발사장 리스폰 지점을 뒤에서 비추는 자리 (새 캐릭터가 나타났을 때 기본 카메라가 잡는 구도와 비슷하게)
 local function padCFrame(): CFrame
 	return CFrame.lookAt(Vector3.new(0, 9, W.SpawnDistance + 12), Vector3.new(0, 5, W.SpawnDistance))
@@ -300,8 +315,12 @@ function CameraRig.init()
 	end)
 	State.on("FlightEnd", function(info: any)
 		if type(info) == "table" and not info.escaped then
-			CameraRig.addShake(1.5)
+			-- 탄 사람은 엔딩 카메라로 바뀌는 순간 살짝만 (로켓이 터지는 순간 크게: EndingBlast)
+			CameraRig.addShake(if State.aboard() then 0.6 else 1.5)
 		end
+	end)
+	State.on("EndingBlast", function()
+		CameraRig.addShake(ENDING_SHAKE)
 	end)
 end
 
@@ -310,7 +329,7 @@ end
 local function shakeAmount(dt: number, clock: number): (CFrame, Vector3)
 	shake = math.max(0, shake - dt * 1.6)
 	local rumble = 0
-	if State.phase() == "Flight" then
+	if State.flying() then
 		rumble = if State.flag("Crisis") then 0.3 else 0.1
 	end
 	local strength = shake * shake + rumble * rumble
@@ -344,8 +363,10 @@ function CameraRig.update(dt: number)
 		return
 	end
 	local aboard = State.aboard()
-	viewButton.Visible = aboard
-	updateHighlight(aboard)
+	-- 엔딩·정산(충격파에 잡힌 판): 로켓이 터졌으므로 바깥 엔딩 카메라에 고정. 시점 버튼·내 테두리 없음
+	local ending = aboard and State.caught()
+	viewButton.Visible = aboard and not ending
+	updateHighlight(aboard and not ending)
 	setCabinZoom(aboard)
 
 	if not aboard then
@@ -412,14 +433,17 @@ function CameraRig.update(dt: number)
 	handoverFrom = nil
 	managed = true
 	blockReset(true)
-	-- 관전자는 늘, 승무원은 내 미션 입력을 받는 동안만 걷기·점프를 잠금 (넘기는 중에 풀렸다가 다음 판이 시작돼도 다시 맞춰짐)
-	lockMovement(State.role() ~= "Crew" or State.missionInput)
+	-- 관전자는 늘, 승무원은 내 미션 입력을 받는 동안과 엔딩·정산(바깥 카메라에 고정) 동안 걷기·점프를 잠금
+	-- (넘기는 중에 풀렸다가 다음 판이 시작돼도 다시 맞춰짐)
+	lockMovement(State.role() ~= "Crew" or State.missionInput or ending)
 
 	local clock = os.clock()
 	local turn, offset = shakeAmount(dt, clock)
 	local target: CFrame? = nil
 	local focus = ROCKET_CENTER
-	if clock < closeupUntil then
+	if ending then
+		target = endingCFrame() -- 남은 클로즈업은 다음 판(탑승·조립)이 시작될 때 지움
+	elseif clock < closeupUntil then
 		target, focus = closeupCFrame(closeupSeat)
 	end
 	if target == nil and view == "Exterior" then
@@ -454,7 +478,7 @@ function CameraRig.update(dt: number)
 	if camera.CameraType ~= Enum.CameraType.Scriptable then
 		camera.CameraType = Enum.CameraType.Scriptable
 	end
-	if clock >= revealAt then
+	if clock >= revealAt and not ending then -- 엔딩에서는 Ending 이 탄 사람을 숨김
 		revealAt = clock + 0.25
 		revealCharacter()
 	end
