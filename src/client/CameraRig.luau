@@ -442,8 +442,7 @@ function CameraRig.update(dt: number)
 	local target: CFrame? = nil
 	local focus = ROCKET_CENTER
 	if ending then
-		target = endingCFrame()
-		closeupUntil = 0
+		target = endingCFrame() -- 남은 클로즈업은 다음 판(탑승·조립)이 시작될 때 지움
 	elseif clock < closeupUntil then
 		target, focus = closeupCFrame(closeupSeat)
 	end
