@@ -32,7 +32,11 @@ local function px(n: number): number
 	return math.floor(n * S + 0.5)
 end
 
+local MAIN_TOP = 46 -- 거리 숫자(Main) 칸의 위 끝 (px(), 글자 묶음 맨 위에서)
+local MAIN_HEIGHT = 112 -- 거리 숫자 칸의 높이 (px())
+
 local gui: SurfaceGui? = nil
+local boardPart: BasePart? = nil
 local headLabel: TextLabel
 local mainLabel: TextLabel
 local subLabel: TextLabel
@@ -56,6 +60,7 @@ local function build(board: BasePart)
 		Parent = playerGui,
 	})
 	gui = surface
+	boardPart = board
 	local back = Ui.frame(surface, "Back", {
 		Size = UDim2.fromScale(1, 1),
 		BackgroundColor3 = Color3.fromRGB(8, 10, 18),
@@ -69,8 +74,8 @@ local function build(board: BasePart)
 	})
 	mainLabel = Ui.bigLabel(back, "Main", "", px(104), {
 		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.fromScale(0.5, px(46) / HEIGHT),
-		Size = UDim2.new(1, 0, 0, px(112)),
+		Position = UDim2.fromScale(0.5, px(MAIN_TOP) / HEIGHT),
+		Size = UDim2.new(1, 0, 0, px(MAIN_HEIGHT)),
 		TextColor3 = C.Cyan,
 	})
 	subLabel = Ui.label(back, "Sub", "", px(34), {
@@ -127,6 +132,17 @@ local function build(board: BasePart)
 		})
 		buildBars[info.Id] = { fill = fill, value = value }
 	end
+end
+
+-- 코인 연출(CoinFx)이 거리 코인을 내보내는 곳: 전광판 앞면의 거리 숫자 가운데 (월드 좌표). 전광판이 아직 없으면 nil
+function Board.coinSource(): Vector3?
+	local part = boardPart
+	if part == nil or part.Parent == nil then
+		return nil
+	end
+	local fromTop = (px(MAIN_TOP) + px(MAIN_HEIGHT) / 2) / PIXELS_PER_STUD
+	-- 앞면(화면을 붙인 쪽)은 파트의 -Z 쪽
+	return (part.CFrame * CFrame.new(0, part.Size.Y / 2 - fromTop, -part.Size.Z / 2 - 0.05)).Position
 end
 
 function Board.init()
