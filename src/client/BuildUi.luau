@@ -31,7 +31,7 @@ local TYPE_STYLE: { [string]: { Color: Color3, Desc: string } } = {
 	core = { Color = Color3.fromRGB(255, 206, 84), Desc = "콤보 배율" },
 }
 BuildUi.TypeStyle = TYPE_STYLE -- 선실 부품 장착판(PartsBoard)도 같은 색을 씀
-local STARS = { "★", "★★", "★★★", "★★★★" } -- 레어도 (일반·희귀·영웅·전설)
+local STARS = { "★", "★★", "★★★", "★★★★" } -- 예전 레어도 표시. 뽑기 PR 부터 ★ 는 돌파 단계라 칸에는 레어도 이름을 씀
 -- 내 부품 표시 색 (Nick 11-27: 현황판에서 내 부품은 구별되게). 부품 종류 색 6개 어디에도 없는 분홍으로,
 -- 조립 화면·장착판·'내 부품' 패널이 같이 씀
 local MINE_COLOR = Color3.fromRGB(255, 72, 196)
@@ -197,7 +197,7 @@ local function paint(cell: Cell, look: string, value: number, typeId: string)
 		stroke.Thickness = 4
 		stroke.Transparency = 0
 		mainText = levelText(level)
-		subText = STARS[math.clamp(math.floor(rarity), 1, #STARS)]
+		subText = Config.Parts.RarityNames[math.clamp(math.floor(rarity), 1, #Config.Parts.RarityNames)]
 		whoText = if mine then "나" else nameOf(value)
 		if before == "open" or before == "pending" then
 			-- 장착 연출: 꽂히는 순간 잠깐 밝게

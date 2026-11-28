@@ -1,5 +1,5 @@
 -- '내 부품' 패널 (Nick 11-27): 선실 -X 벽 장착판(PartsBoard) 바로 아래 'MyPartsBoard' 에 내 부품 6개만 모아 보여 줍니다.
--- 종류마다 이름·레어도(별)·레벨·경험치 막대. 비행 중에는 서버가 Config.Progress.SendInterval(0.25초)마다 보내는 값으로
+-- 종류마다 이름·돌파(★)·레어도와 부품 이름(레어도 색)·레벨·경험치 막대. 돌파 한도에 닿으면 '돌파 필요' (뽑기, Config.Gacha). 비행 중에는 서버가 Config.Progress.SendInterval(0.25초)마다 보내는 값으로
 -- 막대가 쭉쭉 차고, 레벨이 오를 때마다 그 부품 자리에서 폭죽이 터지며 '+N Lv' 가 뜹니다 (그사이 여러 레벨이 오르면 한 번으로 묶음).
 -- 값은 서버 PartProgress 가 이 사람에게만 'PartProgress' 신호로 보냅니다. 시작할 때 한 번 달라고 요청합니다.
 -- 패널과 폭죽은 내 화면에만 있어서, 같은 벽을 봐도 사람마다 자기 부품이 보입니다.
@@ -12,6 +12,7 @@ local SoundService = game:GetService("SoundService")
 local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Catalog = require(Shared:WaitForChild("Catalog"))
 local Config = require(Shared:WaitForChild("Config"))
 local Fmt = require(Shared:WaitForChild("Fmt"))
 local Leveling = require(Shared:WaitForChild("Leveling"))
@@ -46,6 +47,7 @@ type Column = {
 	typeId: string,
 	frame: Frame,
 	title: TextLabel,
+	variant: TextLabel,
 	level: TextLabel,
 	pulse: UIScale,
 	fill: Frame,
@@ -59,6 +61,9 @@ type Column = {
 	feverOn: boolean,
 	lv: number,
 	rarity: number,
+	star: number,
+	cap: number,
+	look: string,
 	expValue: number,
 	lastBurst: number, -- 마지막으로 폭죽이 터진 시각 (os.clock)
 	shown: number, -- 지금 보이는 막대 길이 (0~1)
@@ -199,18 +204,30 @@ end
 
 local function showText(column: Column)
 	local max = column.lv >= Leveling.MaxLevel
+	local capped = not max and column.lv >= column.cap -- 돌파 한도: 경험치는 쌓아 두고 레벨은 멈춤
 	column.level.Text = if max then "MAX" else "Lv " .. Fmt.comma(column.lv)
-	column.level.TextColor3 = if max then C.Yellow else C.Text
+	column.level.TextColor3 = if max or capped then C.Yellow else C.Text
 	local need = Leveling.need(column.lv, column.rarity)
-	column.exp.Text = if max then "만렙" else Fmt.comma(math.floor(column.expValue)) .. " / " .. Fmt.comma(need)
-	local stars = BuildUi.Stars[math.clamp(math.floor(column.rarity), 1, #BuildUi.Stars)]
+	column.exp.Text = if max
+		then "만렙"
+		elseif capped then "한도! 돌파하면 더 올라감"
+		else Fmt.comma(math.floor(column.expValue)) .. " / " .. Fmt.comma(need)
+	column.exp.TextColor3 = if capped then C.Yellow else C.Dim
 	local info = nil
 	for _, partType in ipairs(Config.Parts.Types) do
 		if partType.Id == column.typeId then
 			info = partType
 		end
 	end
-	column.title.Text = (if info then info.Name else column.typeId) .. " " .. stars
+	column.title.Text = (if info then info.Name else column.typeId) .. " ★" .. tostring(column.star)
+	local rarity = math.clamp(math.floor(column.rarity), 1, #Config.Parts.RarityNames)
+	local variant = Catalog.get(column.look)
+	if variant == nil or variant.Rarity ~= rarity then
+		variant = Catalog.ofRarity(column.typeId, rarity)[1]
+	end
+	-- 부품 이름만 (레어도는 글자 색으로): 칸이 좁아서 레어도 글자까지 넣으면 잘림
+	column.variant.Text = if variant then variant.Name else Config.Parts.RarityNames[rarity]
+	column.variant.TextColor3 = Catalog.rarityText(rarity)
 end
 
 -- 서버 값 반영. 첫 값은 바로 맞추고, 그 뒤로는 레벨이 오른 부품마다 폭죽
@@ -227,6 +244,12 @@ local function apply(payload: any)
 		column.lv = number(payload.lv, id, column.lv)
 		column.expValue = number(payload.exp, id, column.expValue)
 		column.rarity = number(payload.rarity, id, column.rarity)
+		column.star = number(payload.star, id, column.star)
+		column.cap = number(payload.cap, id, Leveling.cap(column.star))
+		local look = if type(payload.look) == "table" then payload.look[id] else nil
+		if type(look) == "string" then
+			column.look = look
+		end
 		column.target = Leveling.fraction(column.lv, column.expValue, column.rarity)
 		local ups = number(payload.ups, id, 0)
 		if first then
@@ -302,14 +325,19 @@ local function build(board: BasePart)
 		})
 		Ui.corner(frame, 12)
 		Ui.stroke(frame, style.Color, 2, 0.3)
-		local title = Ui.label(frame, "PartName", info.Name, 28, {
+		local title = Ui.label(frame, "PartName", info.Name, 26, {
 			Position = UDim2.fromScale(0, 0.02),
-			Size = UDim2.fromScale(1, 0.18),
+			Size = UDim2.fromScale(1, 0.16),
 			TextColor3 = style.Color,
 		})
-		local level = Ui.label(frame, "Level", "Lv 1", 52, {
-			Position = UDim2.fromScale(0, 0.22),
-			Size = UDim2.fromScale(1, 0.3),
+		local variant = Ui.label(frame, "Variant", "", 20, {
+			Position = UDim2.new(0, 6, 0.18, 0),
+			Size = UDim2.new(1, -12, 0.13, 0),
+			TextTruncate = Enum.TextTruncate.AtEnd,
+		})
+		local level = Ui.label(frame, "Level", "Lv 1", 46, {
+			Position = UDim2.fromScale(0, 0.31),
+			Size = UDim2.fromScale(1, 0.24),
 		})
 		local pulse = Ui.make("UIScale", { Name = "Pulse", Scale = 1, Parent = level })
 		local bar = Ui.frame(frame, "ExpBar", {
@@ -356,6 +384,7 @@ local function build(board: BasePart)
 			typeId = info.Id,
 			frame = frame,
 			title = title,
+			variant = variant,
 			level = level,
 			pulse = pulse,
 			fill = fill,
@@ -369,6 +398,9 @@ local function build(board: BasePart)
 			feverOn = false,
 			lv = 1,
 			rarity = 1,
+			star = 1,
+			cap = Leveling.cap(1),
+			look = Catalog.starter(info.Id).Id,
 			expValue = 0,
 			lastBurst = -math.huge,
 			shown = 0,
