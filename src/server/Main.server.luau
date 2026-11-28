@@ -12,9 +12,11 @@ Net.setupServer()
 local World = require(script.Parent.World)
 local Round = require(script.Parent.Round)
 local DebugCommands = require(script.Parent.DebugCommands)
+local RarityHalo = require(script.Parent.RarityHalo)
 
 World.build()
 Round.start()
 DebugCommands.init()
+RarityHalo.start() -- 머리 뒤 희귀도 구
 
 print("[ROFLY] 데모 1 서버 시작")
