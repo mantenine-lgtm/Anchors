@@ -61,7 +61,17 @@ function Leveling.toGain(level: number, exp: number, levels: number, rarity: num
 	for l = level, target - 1 do
 		total += Leveling.need(l, rarity)
 	end
-	return math.max(total, 0)
+	local gain = math.max(total, 0)
+	-- 쌓인 경험치에 소수가 있으면 빼고 다시 더할 때 반올림으로 아주 조금 모자라 한 레벨 덜 오를 수 있음
+	-- (디버그 +1000 이 가끔 999 만 오르던 것). 그러면 레벨 하나에 드는 양보다 훨씬 작게 조금 더 줌
+	for _ = 1, 4 do
+		local _, _, ups = Leveling.add(level, exp, gain, rarity)
+		if ups >= target - level then
+			break
+		end
+		gain += math.max(gain, 1) * 1e-12
+	end
+	return gain
 end
 
 -- 경험치 막대 길이 (0~1). 만렙이면 1
