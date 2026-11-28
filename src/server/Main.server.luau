@@ -11,11 +11,13 @@ Net.setupServer()
 
 local World = require(script.Parent.World)
 local Round = require(script.Parent.Round)
+local Lift = require(script.Parent.Lift)
 local DebugCommands = require(script.Parent.DebugCommands)
 local RarityHalo = require(script.Parent.RarityHalo)
 
 World.build()
 Round.start()
+Lift.start() -- 발사탑 엘리베이터 (발사장에 있으면)
 DebugCommands.init()
 RarityHalo.start() -- 머리 뒤 희귀도 구
 
