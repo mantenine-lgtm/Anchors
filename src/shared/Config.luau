@@ -376,8 +376,8 @@ Config.CoinFx = {
 	DistanceMaxSprites = 4, -- 거리 코인 한 번에 날리는 코인 수 한도 (작은 효과로 유지)
 	-- 코인 소리: ROFLY_Coin (ElevenLabs 로 만든 0.31초 밝은 코인 차임, Nick 계정으로 Roblox 에 올림).
 	-- ElevenLabs 약관 때문에 소리 파일은 저장소에 두지 않고 에셋 ID 만 씀
-	SoundId = "rbxassetid://93440520253528",
-	SoundVolume = 0.3, -- 가장 작은 효과일 때. 클수록 0.3 더 커짐 (Studio 에서 들어 보고 맞추기)
+	SoundId = "rbxassetid://125291667623272",
+	SoundVolume = 0.55, -- 가장 작은 효과일 때. 클수록 0.3 더 커짐 (Nick 11-28: 레벨업 소리보다 커야 함)
 	SoundSpeedMin = 1.0, -- 작은 코인의 재생 속도 (1.0~1.1). 빠르게 틀수록 날카롭고 짧아짐
 	SoundSpeedMax = 1.3, -- 큰 무더기의 뒤쪽 코인도 이만큼까지만 높게
 	SoundAccentSpeed = 0.85, -- 큰 무더기가 처음 닿을 때 한 번 더 내는 낮고 굵은 소리
@@ -467,7 +467,9 @@ Config.Lift = {
 }
 
 -- 소리. 나중에 바꾸려면 Id 만 고치면 됨
--- ROFLY_ 로 표시한 소리(와 아래 엔진음)는 ElevenLabs 로 만들어(tools/sfx) Nick 의 계정으로 Roblox 에 올린 소리입니다.
+-- ROFLY_ 로 표시한 소리(와 아래 엔진음, 코인 소리)는 ElevenLabs 로 만들어(tools/sfx) Nick 의 계정으로 Roblox 에 올린 소리입니다.
+-- 게임을 가진 계정으로 올린 소리만 납니다. 다른 계정이 올린 비공개 소리는 "not authorized" 로 안 나므로
+-- 게임 주인 계정이 바뀌면 소리를 그 계정으로 다시 올리고 Id 를 바꿉니다 (2026-11-28 에 그렇게 다시 올림).
 -- 이 게임에서만 쓰고, 소리 파일은 저장소에 올리지 않습니다 (ElevenLabs 약관). 크기를 같은 기준으로 맞춰 두었으므로
 -- 소리끼리의 크기 균형은 Volume 만으로 정합니다 (자주 나는 소리는 작게, 발사·충격파처럼 가끔 오는 큰 순간은 크게).
 -- 나머지는 Roblox 가 예전 기본 소리 파일을 공개 에셋으로 올려 둔 것(크리에이터 스토어, 만든 이 @Roblox,
@@ -475,19 +477,21 @@ Config.Lift = {
 -- (2026-11 맥 Studio 설치 폴더 content/sounds 에서 확인: action_falling.ogg, impact_explosion_03.mp3 등)
 -- 예전 경로(Rocket shot.wav, victory.wav 등)로는 소리가 나지 않습니다.
 Config.Sounds = {
-	Countdown = { Id = "rbxassetid://118533434533356", Volume = 0.6 }, -- ROFLY_Countdown: 짧고 맑은 전자음 삑
-	Launch = { Id = "rbxassetid://113747078016963", Volume = 0.9 }, -- ROFLY_Launch: 점화 폭발음이 굉음으로 올라감
-	MissionSuccess = { Id = "rbxassetid://130117785829325", Volume = 0.5 }, -- ROFLY_MissionSuccess: 짧고 밝은 성공 차임
-	Combo = { Id = "rbxassetid://135098826380564", Volume = 0.6 }, -- ROFLY_Combo: 올라가는 콤보 차임
+	Countdown = { Id = "rbxassetid://113912958580265", Volume = 0.6 }, -- ROFLY_Countdown: 짧고 맑은 전자음 삑
+	Launch = { Id = "rbxassetid://88737136990816", Volume = 0.9 }, -- ROFLY_Launch: 점화 폭발음이 굉음으로 올라감
+	MissionSuccess = { Id = "rbxassetid://123490030245354", Volume = 0.5 }, -- ROFLY_MissionSuccess: 짧고 밝은 성공 차임
+	Combo = { Id = "rbxassetid://86110461835347", Volume = 0.6 }, -- ROFLY_Combo: 올라가는 콤보 차임
 	CrisisAlarm = { Id = "rbxassetid://12221990", Volume = 0.8 }, -- electronicpingshort.wav
-	ItemUse = { Id = "rbxassetid://121597781056017", Volume = 0.8 }, -- ROFLY_ItemUse: 에너지가 차오르는 부스터 소리
+	ItemUse = { Id = "rbxassetid://98161551530447", Volume = 0.8 }, -- ROFLY_ItemUse: 에너지가 차오르는 부스터 소리
 	Press = { Id = "rbxassetid://12221976", Volume = 0.5 }, -- clickfast.wav
 	Wrong = { Id = "rbxassetid://12222242", Volume = 0.25 }, -- uuhhh.wav
-	Caught = { Id = "rbxassetid://140326844031753", Volume = 0.9 }, -- ROFLY_Caught: 충격파가 덮치는 큰 폭발음
+	Caught = { Id = "rbxassetid://98178750186121", Volume = 0.9 }, -- ROFLY_Caught: 충격파가 덮치는 큰 폭발음
 	Thunder = { Id = "rbxassetid://12222030", Volume = 0.25 }, -- HalloweenThunder.wav
 	Thanks = { Id = "rbxassetid://12222170", Volume = 0.5 }, -- switch.wav
 	PartPlace = { Id = "rbxassetid://12221976", Volume = 0.8 }, -- clickfast.wav. 내 부품을 꽂음
 	LaunchAlert = { Id = "rbxassetid://12221990", Volume = 1 }, -- electronicpingshort.wav. 선장 발사 임박 (세 번 연달아 울림)
+	-- ROFLY_LevelUp: 짧게 올라가다 맑게 끝나는 0.7초 차임. 내 부품 레벨업 (MyParts 가 0.45초 간격으로 틂. 자주 나므로 코인 소리보다 작게, Nick 11-28)
+	LevelUp = { Id = "rbxassetid://120908015105749", Volume = 0.2 },
 }
 
 -- 엔진음: 비행 내내 반복해서 깔리는 소리 세 겹. 계산은 EngineMix.luau, 소리 내기는 클라이언트 Sfx.luau.
@@ -499,8 +503,8 @@ Config.Sounds = {
 Config.EngineSound = {
 	-- 엔진 소리 하나를 굉음·웅웅 두 겹이 같이 씀 (용량을 줄이려고). 웅웅 소리는 Pitch 배로 낮게,
 	-- 소리 길이의 Offset 비율만큼 어긋난 자리부터 틀어서 굉음과 다른 겹으로 들림
-	Roar = { Id = "rbxassetid://139640557468504", Volume = 0.6 },
-	Hum = { Id = "rbxassetid://139640557468504", Volume = 0.4, Pitch = 0.75, Offset = 0.5 },
+	Roar = { Id = "rbxassetid://72652689019739", Volume = 0.6 },
+	Hum = { Id = "rbxassetid://72652689019739", Volume = 0.4, Pitch = 0.75, Offset = 0.5 },
 	-- 기본 내장 낙하 바람 소리 (설치본에 있음)
 	Wind = { Id = "rbxasset://sounds/action_falling.ogg", Volume = 0.35 },
 	-- 엔진 소리 에셋을 못 불러오면 대신 쓰는 기본 내장 소리. FallbackPitch 배로 낮춰 굉음처럼 들리게 함

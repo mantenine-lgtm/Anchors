@@ -34,9 +34,9 @@ local PAD = 14 -- 패널 안쪽 여백(픽셀)
 local BAR_SPEED = 5 -- 경험치 막대가 1초에 움직이는 길이 (막대 전체 = 1)
 local FX_MARGIN = 0.8 -- 폭죽이 터지는 자리: 패널 앞면에서 이만큼(스터드) 앞
 local FX_HEIGHT = 0.4 -- 폭죽이 터지는 높이: 패널 위에서 이 비율 (레벨 글자 자리)
-local POP_SOUND = "rbxasset://sounds/impact_explosion_03.mp3" -- 설치본에 있는 파일. 높은 음으로 작게 틀면 폭죽 소리
-local POP_VOLUME = 0.15
-local POP_GAP = 0.45 -- 폭죽 소리 사이 최소 간격(초). 초반엔 비행 내내 레벨이 오르므로 시끄럽지 않게
+local POP = Config.Sounds.LevelUp -- 레벨업 소리 (ElevenLabs 로 만든 짧은 차임). Id·크기는 Config.Sounds 에서 바꿈
+local POP_BIG = 1.5 -- 한동안 안 오르다 오른 큰 레벨업은 이 배로 크게
+local POP_GAP = 0.45 -- 레벨업 소리 사이 최소 간격(초). 초반엔 비행 내내 레벨이 오르므로 시끄럽지 않게
 local BIG_QUIET = 1.5 -- 이만큼(초) 안 오르다 오르면 크게 터뜨림 (갈수록 레벨업이 드물어져 한 번 한 번이 큼)
 local RETRY = 5 -- 값을 못 받으면 이 간격(초)으로 다시 요청
 local FEVER_CHECK = 0.1 -- 내 부품 피버를 다시 읽는 간격(초)
@@ -168,8 +168,9 @@ local function popSound(big: boolean)
 	lastPop = now
 	popIndex = popIndex % #pops + 1 -- 두 개를 번갈아 써서 앞 소리가 끊기지 않게
 	local sound = pops[popIndex]
-	sound.Volume = if big then POP_VOLUME * 2 else POP_VOLUME
-	sound.PlaybackSpeed = (if big then 1.3 else 1.6) + math.random() * 0.5
+	sound.Volume = if big then POP.Volume * POP_BIG else POP.Volume
+	-- 작은 레벨업은 조금 높고 가볍게, 큰 레벨업은 원래 높이로. 자주 반복돼도 덜 질리게 높이를 조금씩 바꿈
+	sound.PlaybackSpeed = (if big then 1 else 1.08) + math.random() * 0.06
 	sound:Play()
 end
 
@@ -415,8 +416,8 @@ local function build(board: BasePart)
 	for i = 1, 2 do
 		local sound = Instance.new("Sound")
 		sound.Name = "RoflyPartPop" .. i
-		sound.SoundId = POP_SOUND
-		sound.Volume = POP_VOLUME
+		sound.SoundId = POP.Id
+		sound.Volume = POP.Volume
 		sound.Parent = SoundService
 		pops[i] = sound
 	end
