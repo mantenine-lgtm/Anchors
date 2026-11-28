@@ -4,14 +4,16 @@
 -- 승무원은 선실을 걸어다니다가, 미션이 뜨면 입력을 끝낼 때까지(또는 시간이 끝날 때까지) 그 자리에 멈춥니다
 -- (State.missionInput → CameraRig 가 걷기·점프를 잠금). 터치 기기는 그동안만 이동 스틱 대신 미션 버튼이 뜹니다.
 --
--- 연타 미션(Config.Tap, Nick 11-28): 화면 양옆에 큰 '연타!' 버튼 두 개가 뜨고(양손 엄지용), 정해진 시간 동안 그 버튼이나
--- 스페이스(방향키·WASD·게임패드 A 도 됨)를 빠르게 누릅니다. 내가 누르면 그 버튼이 눌려 들어가며 금빛 고리가 퍼지고
--- (키보드는 왼쪽·오른쪽 버튼이 번갈아 눌림), 다른 사람이 누른 만큼(서버가 알리는 합계가 오른 만큼)은 두 버튼 위에
--- 하늘색 작은 고리가 톡톡 터지며 버튼이 들썩입니다.
+-- 연타 미션(Config.Tap, Nick 11-28): 화면 양옆에 ← · → 화살표가 그려진 큰 '연타!' 버튼 두 개가 뜨고(양손 엄지용), 정해진
+-- 시간 동안 그 버튼이나 키보드 ← → 키(A·D, 게임패드 십자키 좌우도 됨. 스페이스는 안 셈)를 빠르게 누릅니다. ← 는 왼쪽 버튼,
+-- → 는 오른쪽 버튼을 누른 것과 같습니다. 내가 누르면 그 버튼이 눌려 들어가며 금빛 고리가 퍼지고, 다른 사람이 누른 만큼
+-- (서버가 알리는 합계가 오른 만큼)은 두 버튼 위에 하늘색 작은 고리가 톡톡 터지며 버튼이 들썩입니다.
+-- 미션 입력 중에는 ← → 키가 기본 카메라를 돌리지 않게 막습니다(연타로 마구 누르면 화면이 흔들리므로).
 -- 누른 횟수는 바로 화면에 올리고, 서버에는 모아서 SendInterval 초마다 누적 횟수만 보냅니다(원격 호출이 몰리지 않게).
 -- 아래 미션 판의 게이지는 로켓 전체 연타 합계의 단계(합계가 두 배가 될 때마다 1단계)이고, 단계가 높을수록 그 미션의 가속이 커집니다.
 -- 이펙트는 고리 Frame 몇 개를 돌려 쓰고 트윈 없이 매 프레임 크기만 바꿔서 폰에서도 가볍습니다.
 
+local ContextActionService = game:GetService("ContextActionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 
@@ -113,7 +115,10 @@ type TapPad = {
 	lastMyRing: number,
 }
 local tapPads: { TapPad } = {} -- 1 = 왼쪽(TapLeft), 2 = 오른쪽(TapRight)
-local keySide = 1 -- 키보드로 누르면 왼쪽·오른쪽 버튼이 번갈아 눌린 것으로 보여 줌
+local TAP_KEY_SIDE: { [string]: number } = { Left = 1, Right = 2 } -- 연타 미션에서 세는 키(KEY_MAP 의 이름) -> 누른 버튼
+local TAP_KEY_HINT = { "또는 ← 키", "또는 → 키" }
+local SINK_ACTION = "RoflyMissionArrowKeys"
+local sinkingKeys = false
 
 local mission: Mission? = nil
 local tap: Tap? = nil
@@ -203,7 +208,7 @@ local function tapPrompt(): string
 	if wantsPad() then
 		return "연타! 양옆 버튼을 다 같이 빠르게!"
 	end
-	return "연타! 스페이스나 양옆 버튼을 빠르게!"
+	return "연타! ← → 키나 양옆 버튼을 빠르게!"
 end
 
 -- 고리 하나를 띄움. mine 이면 버튼 둘레에서 크게 퍼지는 금빛 고리, 아니면 버튼 위 아무 데서나 톡 터지는 하늘색 작은 고리
@@ -302,8 +307,8 @@ local function refreshTap(t: Tap)
 	end
 end
 
--- side = 누른 버튼 (1 왼쪽, 2 오른쪽). 키보드면 nil 이고 두 버튼이 번갈아 눌린 것으로 보여 줌
-local function pressTap(side: number?)
+-- side = 누른 버튼 (1 왼쪽, 2 오른쪽. 키보드 ← 는 왼쪽, → 는 오른쪽)
+local function pressTap(side: number)
 	local t = tap
 	if not t or t.finished or State.role() ~= "Crew" then
 		return
@@ -312,12 +317,7 @@ local function pressTap(side: number?)
 		return
 	end
 	t.count += 1
-	local index = side
-	if index == nil then
-		index = keySide
-		keySide = 3 - keySide
-	end
-	local pad = tapPads[index]
+	local pad = tapPads[side]
 	local clock = os.clock()
 	if pad then
 		pad.myDepth = 1
@@ -335,7 +335,11 @@ end
 
 local function press(key: string)
 	if tap then
-		pressTap()
+		-- 연타 미션: 키보드·게임패드는 왼쪽·오른쪽 키만 셈 (누른 쪽 버튼이 눌림). 스페이스·위·아래는 안 셈
+		local side = TAP_KEY_SIDE[key]
+		if side then
+			pressTap(side)
+		end
 		return
 	end
 	local m = mission
@@ -393,11 +397,10 @@ local function startTap(info: any)
 	otherQueue = 0
 	otherFrac = 0
 	appear = 0
-	keySide = 1
-	for _, pad in ipairs(tapPads) do
+	for side, pad in ipairs(tapPads) do
 		pad.myDepth = 0
 		pad.otherDepth = 0
-		pad.hint.Text = if wantsPad() then "" else "또는 스페이스"
+		pad.hint.Text = if wantsPad() then "" else TAP_KEY_HINT[side]
 	end
 	State.missionInput = true
 	titleLabel.Text = tapPrompt()
@@ -527,7 +530,7 @@ end
 
 -- 연타 버튼 하나: 둥글고 큼. 여러 손가락이 따로 눌러도 하나하나 세도록 버튼의 InputBegan(누를 때마다 따로 옴)을 씀.
 -- 글자·숫자·고리는 모두 버튼의 자식이라 누르는 것을 막지 않음
-local function buildTapPad(name: string, side: number, position: UDim2): TapPad
+local function buildTapPad(name: string, side: number, direction: string, position: UDim2): TapPad
 	local button = Ui.button(root, name, "", 20, TAP_BASE, {
 		AnchorPoint = Vector2.new(0.5, 0.5),
 		Position = position,
@@ -539,19 +542,23 @@ local function buildTapPad(name: string, side: number, position: UDim2): TapPad
 	Ui.make("UICorner", { CornerRadius = UDim.new(0.5, 0), Parent = button })
 	local stroke = Ui.stroke(button, C.Yellow, 4, 0)
 	local scale = Ui.make("UIScale", { Parent = button })
-	local word = Ui.label(button, "Word", "연타!", 44, {
-		Position = UDim2.fromScale(0, 0.2),
-		Size = UDim2.fromScale(1, 0.32),
+	-- 위쪽에 큰 화살표(왼쪽 버튼 ←, 오른쪽 버튼 →: 키보드 ← → 키와 같은 쪽), 그 아래 '연타!'·내 횟수·키 안내
+	local arrow = Ui.arrow(button, direction, C.Yellow)
+	arrow.Position = UDim2.fromScale(0.5, 0.25)
+	arrow.Size = UDim2.fromScale(0.34, 0.34)
+	local word = Ui.label(button, "Word", "연타!", 32, {
+		Position = UDim2.fromScale(0, 0.43),
+		Size = UDim2.fromScale(1, 0.18),
 		TextColor3 = C.Yellow,
 		TextStrokeTransparency = 0.3,
 	})
-	local count = Ui.label(button, "Count", "0", 30, {
-		Position = UDim2.fromScale(0, 0.52),
-		Size = UDim2.fromScale(1, 0.2),
+	local count = Ui.label(button, "Count", "0", 28, {
+		Position = UDim2.fromScale(0, 0.61),
+		Size = UDim2.fromScale(1, 0.15),
 	})
 	local hint = Ui.label(button, "Hint", "", 15, {
-		Position = UDim2.fromScale(0, 0.73),
-		Size = UDim2.fromScale(1, 0.1),
+		Position = UDim2.fromScale(0, 0.77),
+		Size = UDim2.fromScale(1, 0.09),
 		TextColor3 = C.Dim,
 	})
 	local pad: TapPad = {
@@ -712,8 +719,8 @@ function MissionUi.init()
 
 	-- 연타 버튼 두 개: 양손 엄지 자리(이동 스틱 자리와 점프 버튼 자리). 위 끝이 502 라서 디버그 패널(아래 끝 501)·
 	-- 부스터 메뉴(왼쪽 가운데)와 겹치지 않고, 가운데 미션 판(340~940)과도 떨어져 있음
-	tapPads[1] = buildTapPad("TapLeft", 1, UDim2.new(0, 160, 1, -118))
-	tapPads[2] = buildTapPad("TapRight", 2, UDim2.new(1, -150, 1, -118))
+	tapPads[1] = buildTapPad("TapLeft", 1, "Left", UDim2.new(0, 160, 1, -118))
+	tapPads[2] = buildTapPad("TapRight", 2, "Right", UDim2.new(1, -150, 1, -118))
 
 	UserInputService.InputBegan:Connect(function(input: InputObject)
 		if input.UserInputType == Enum.UserInputType.Touch then
@@ -734,6 +741,22 @@ function MissionUi.init()
 			panel.Visible = false
 		end
 	end)
+end
+
+-- 미션 입력 중에는 ← → 키를 기본 카메라(키보드로 화면 돌리기)에 넘기지 않음: 미션 키로만 쓰고, 연타로 마구 눌러도
+-- 화면이 흔들리지 않게. 키 자체는 위의 UserInputService.InputBegan 으로 그대로 받음 (ContextActionService 가 가로챈 키도 옴)
+local function setArrowSink(on: boolean)
+	if sinkingKeys == on then
+		return
+	end
+	sinkingKeys = on
+	if on then
+		ContextActionService:BindActionAtPriority(SINK_ACTION, function()
+			return Enum.ContextActionResult.Sink
+		end, false, Enum.ContextActionPriority.High.Value, Enum.KeyCode.Left, Enum.KeyCode.Right)
+	else
+		ContextActionService:UnbindAction(SINK_ACTION)
+	end
 end
 
 -- 다른 사람 누름: 서버 합계가 오른 만큼을 다음 ShowInterval 동안 고르게 나눠, 버튼을 들썩이고 작은 고리를 띄움
@@ -831,10 +854,11 @@ function MissionUi.update(_dt: number)
 	local directionActive = mission ~= nil and not (mission :: Mission).finished and flying and crew
 	local tapActive = tap ~= nil and not (tap :: Tap).finished and flying and crew
 	State.missionInput = directionActive or tapActive
+	setArrowSink(directionActive or tapActive)
 	local showPad = directionActive and wantsPad()
 	padFrame.Visible = showPad
 	jumpButton.Visible = showPad
-	-- 양옆 연타 버튼 (모든 기기. PC 는 마우스로도, 스페이스로도)
+	-- 양옆 연타 버튼 (모든 기기. PC 는 마우스로도, ← → 키로도)
 	for _, pad in ipairs(tapPads) do
 		pad.button.Visible = tapActive
 	end
