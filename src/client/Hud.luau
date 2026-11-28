@@ -83,6 +83,7 @@ local resultsShowAt = 0
 local resultsData: any = nil
 local resultsBuilt = false
 local endLabel: TextLabel
+local ENDING_LABEL_Y = 0.15 -- 엔딩(충격파에 잡혀 바깥에서 로켓이 터지는 장면)에서 '따라잡혔습니다' 글자 높이 (화면 높이 비율)
 local endUntil = 0
 
 -- 화면 번쩍임
@@ -690,10 +691,18 @@ local function onThanksFx(info: any)
 end
 
 local function onFlightEnd(info: any)
+	endLabel.Position = UDim2.fromScale(0.5, 0.4)
 	if info.escaped then
 		endLabel.Text = "폭발권 밖으로 탈출했습니다!"
 		endLabel.TextColor3 = C.Yellow
 		flash(C.White, 0.8, 1.2)
+	elseif State.aboard() then
+		-- 엔딩: 바깥 시점으로 바뀌는 순간은 짧게만 번쩍임 (터지는 순간에 크게 번쩍임: EndingBlast).
+		-- 글자는 위쪽(거리 글자 아래)에 띄워 가운데에서 터지는 로켓을 가리지 않게
+		endLabel.Text = "충격파에 따라잡혔습니다"
+		endLabel.TextColor3 = C.Red
+		endLabel.Position = UDim2.fromScale(0.5, ENDING_LABEL_Y)
+		flash(C.Orange, 0.35, 0.3)
 	else
 		endLabel.Text = "충격파에 따라잡혔습니다"
 		endLabel.TextColor3 = C.Red
@@ -907,8 +916,8 @@ function Hud.update(_dt: number)
 		end
 	end
 
-	-- 비행
-	local flying = phase == "Flight"
+	-- 비행 (충격파에 잡히면 엔딩 동안 비행 판을 숨겨 터지는 장면만 보이게)
+	local flying = State.flying()
 	leftPanel.Visible = flying
 	rightPanel.Visible = flying
 	if flying then
@@ -1002,6 +1011,9 @@ function Hud.init()
 	State.on("ItemUsed", onItemUsed)
 	State.on("ThanksFx", onThanksFx)
 	State.on("FlightEnd", onFlightEnd)
+	State.on("EndingBlast", function()
+		flash(C.White, 0.85, 0.9) -- 엔딩에서 로켓이 터지는 순간
+	end)
 	State.on("Results", onResults)
 	State.on("Announce", function(text: any)
 		if type(text) == "string" then

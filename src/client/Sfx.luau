@@ -141,8 +141,14 @@ function Sfx.init()
 		flightEnded = true
 		if type(info) == "table" and not info.escaped then
 			caught = true
-			Sfx.play("Caught")
+			-- 탄 사람은 엔딩에서 로켓이 터지는 순간(EndingBlast)에 폭발음. 그때까지는 엔진음이 끊긴 채 조용함
+			if not State.aboard() then
+				Sfx.play("Caught")
+			end
 		end
+	end)
+	State.on("EndingBlast", function()
+		Sfx.play("Caught")
 	end)
 	State.on("Phase", function(phase: string)
 		if phase == "Join" or phase == "Build" or phase == "Countdown" then

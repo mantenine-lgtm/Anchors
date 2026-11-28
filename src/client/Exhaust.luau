@@ -377,7 +377,8 @@ end
 function Exhaust.update(dt: number)
 	local phase = State.phase()
 	local clock = os.clock()
-	local flying = phase == "Flight"
+	local flying = State.flying() -- 충격파에 잡히면(엔딩) 엔진이 꺼진 것으로 봄: 불꽃을 끄고 남은 연기만 사라지게
+	local after = phase == "Results" or phase == "Flight" -- 비행이 끝난 뒤 (엔딩·정산): 남은 연기가 천천히 흐르며 사라짐
 
 	if flying then
 		local target = thrustTarget(clock)
@@ -404,7 +405,7 @@ function Exhaust.update(dt: number)
 		if made > 0 and emitDistance >= gap then
 			emitDistance = 0 -- 너무 빨라 다 못 내보낸 만큼은 버림 (한꺼번에 몰리지 않게)
 		end
-	elseif phase ~= "Results" then
+	elseif not after then
 		if anyAlive then
 			hideAll()
 		end
