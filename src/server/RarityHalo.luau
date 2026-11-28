@@ -27,7 +27,12 @@ RarityHalo.FolderName = "RarityHalo"
 
 local H = Config.Halo
 local TYPES = Config.Parts.Types
-local COLORS = Config.Parts.RarityColors
+
+-- 희귀도 색 (Config 에는 0~255 RGB 숫자로 있음)
+local COLORS: { Color3 } = {}
+for index, rgb in ipairs(Config.Parts.RarityColors) do
+	COLORS[index] = Color3.fromRGB(rgb[1], rgb[2], rgb[3])
+end
 
 -- 캐릭터(또는 봇 모델) 하나의 구
 type Halo = {

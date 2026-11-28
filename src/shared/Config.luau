@@ -187,12 +187,14 @@ Config.Parts = {
 	RarityNames = { "일반", "희귀", "영웅", "전설" },
 	RarityPower = { 10, 100, 1000, 10000 },
 	-- 희귀도 색 (일반·희귀·영웅·전설). 머리 뒤 희귀도 구(Config.Halo)와 뽑기 화면이 같이 씀.
+	-- 0~255 RGB 숫자 { R, G, B } 로 두고, 쓰는 쪽에서 Color3.fromRGB(c[1], c[2], c[3]) 로 바꿈
+	-- (Config 에는 Color3 같은 Roblox 자료형 없이 순수 값만: 검사기가 Config 를 Roblox 없이 불러와 계산을 맞춰 봄)
 	-- 구는 Neon 이라 밝게 번져 보이므로 진하고 또렷한 색으로 (옅은 색은 흰빛으로 바래 등급끼리 헷갈림)
 	RarityColors = {
-		Color3.fromRGB(130, 138, 150), -- 일반: 회색
-		Color3.fromRGB(40, 130, 255), -- 희귀: 파랑
-		Color3.fromRGB(140, 60, 255), -- 영웅: 보라
-		Color3.fromRGB(255, 130, 0), -- 전설: 주황금
+		{ 130, 138, 150 }, -- 일반: 회색
+		{ 40, 130, 255 }, -- 희귀: 파랑
+		{ 140, 60, 255 }, -- 영웅: 보라
+		{ 255, 130, 0 }, -- 전설: 주황금
 	},
 	-- 레벨 배율은 Parts.levelMultiplier (Config.Progress 아래 설명)
 	SlotBonus = 0.01, -- 꽂은 부품 1개당 그 종류 합계 +1%
