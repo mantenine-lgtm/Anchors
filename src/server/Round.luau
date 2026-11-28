@@ -1184,7 +1184,7 @@ end
 -- ------------------------------------------------------------ 플레이어
 local function onPlayerAdded(player: Player)
 	player:SetAttribute("Tickets", Config.Rewards.StartTickets)
-	player:SetAttribute("Coins", 0)
+	player:SetAttribute("Coins", Config.Rewards.StartCoins) -- 처음 값으로 뽑기 두 번 (경제 v9·v10)
 	player:SetAttribute("BestKm", 0)
 	player:SetAttribute("Joined", false)
 	player:SetAttribute("Seat", 0)
@@ -1288,7 +1288,7 @@ local function connectRemotes()
 		end
 	end)
 
-	-- 내 부품 레벨·경험치를 다시 보내 달라 (화면이 처음 뜰 때). 너무 자주 오면 무시
+	-- 내 부품 레벨·경험치를 다시 보내 달라 (화면이 처음 뜰 때, 도감까지). 너무 자주 오면 무시
 	local progressAsked: { [Player]: number } = {}
 	Net.event("PartProgress").OnServerEvent:Connect(function(player: Player)
 		local t = now()
@@ -1296,7 +1296,7 @@ local function connectRemotes()
 			return
 		end
 		progressAsked[player] = t
-		PartProgress.send(player)
+		PartProgress.send(player, nil, true)
 	end)
 	Players.PlayerRemoving:Connect(function(player: Player)
 		progressAsked[player] = nil

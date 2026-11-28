@@ -807,8 +807,13 @@ function CoinFx.update(dt: number)
 		collect(false)
 	end
 	if inFlight then
-		if wallet ~= lastWallet and not flightOver then
-			walletBase += wallet - lastWallet -- 비행 중에 따로 받거나 쓴 코인 (감사·디버그)
+		local change = wallet - lastWallet
+		if change ~= 0 and (not flightOver or change < 0) then
+			-- 비행 중에 따로 받거나 쓴 코인 (감사·디버그). 비행이 끝난 뒤 늘어나는 것은 정산 몫이라 빼고, 줄어드는 것(정산 중 뽑기)은 바로 뺌
+			walletBase += change
+			if flightOver and walletAfter ~= nil then
+				walletAfter = (walletAfter :: number) + change
+			end
 		end
 		if official ~= nil and not counting and #sprites == 0 and wallet >= (walletAfter or 0) then
 			inFlight = false -- 정산 코인이 다 날아와 닿았고 서버의 보유 코인에도 들어감: 이제 그 값을 그대로 보임

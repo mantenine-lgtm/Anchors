@@ -12,9 +12,11 @@ Net.setupServer()
 local World = require(script.Parent.World)
 local Round = require(script.Parent.Round)
 local DebugCommands = require(script.Parent.DebugCommands)
+local GachaService = require(script.Parent.GachaService)
 
 World.build()
 Round.start()
 DebugCommands.init()
+GachaService.init()
 
 print("[ROFLY] 데모 1 서버 시작")
