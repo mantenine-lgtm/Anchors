@@ -46,17 +46,17 @@ end
 
 -- 부품 그림 (종류마다 한 장, Roblox 에 올린 이미지 Id). 칸 하나 IconTile 픽셀, 한 줄 IconGrid 칸.
 -- 모양 s(1~5)의 층 L(0 금속, 1 칠, 2 빛) 칸 번호 = (s - 1) * 3 + L → (번호 % IconGrid, 번호 // IconGrid) 칸.
--- 원본·만드는 법: 프로젝트 파일 gacha/icons (make_icons.py), 저장소 docs/parts/.
+-- 원본·만드는 법: 저장소 docs/parts/ (make_icons.py, README). 11-28 Nick 계정으로 올림 (Studio).
 Catalog.IconImages = {
-	engine = "",
-	heat = "",
-	fuel = "",
-	sail = "",
-	nav = "",
-	core = "",
+	engine = "rbxassetid://140060114325621",
+	heat = "rbxassetid://128839244820637",
+	fuel = "rbxassetid://108482271111275",
+	sail = "rbxassetid://114876598932922",
+	nav = "rbxassetid://134836754142430",
+	core = "rbxassetid://70453517763319",
 } :: { [string]: string }
 -- 뽑기 버튼·뽑기 칸·결과 연출의 보급 상자 그림 (Roblox 에 올린 이미지 Id, 512x512 투명 바탕). 비어 있으면 Frame 으로 그림
-Catalog.GachaIcon = "" :: string
+Catalog.GachaIcon = "rbxassetid://88751191089595" :: string
 Catalog.IconTile = 256
 Catalog.IconGrid = 4
 Catalog.Shapes = 5
