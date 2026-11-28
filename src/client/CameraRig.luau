@@ -251,6 +251,17 @@ function CameraRig.view(): string
 	return view
 end
 
+-- 클로즈업(카운트다운의 선장, 부스터를 쓴 사람)을 보여 주는 중인지
+function CameraRig.closeupActive(): boolean
+	return os.clock() < closeupUntil
+end
+
+-- 기본 카메라가 지금 로켓 안에서 내 캐릭터를 따라가는지 (선실 시점이고 클로즈업 중이 아님).
+-- 코인 연출(CoinFx)이 코인을 내 캐릭터로 모을지 정할 때 씀
+function CameraRig.followsMe(): boolean
+	return view == "Interior" and not CameraRig.closeupActive() and State.aboard()
+end
+
 function CameraRig.init()
 	-- 발사장에서 1인칭까지 확대하면 마우스가 화면 가운데에 묶여 탑승 버튼을 누를 수 없으므로 막음
 	pcall(function()
