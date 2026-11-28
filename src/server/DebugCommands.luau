@@ -8,6 +8,7 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared:WaitForChild("Config"))
 local Fever = require(Shared:WaitForChild("Fever"))
 local Net = require(Shared:WaitForChild("Net"))
+local TapMission = require(Shared:WaitForChild("TapMission"))
 
 local Metrics = require(script.Parent.Metrics)
 local PartProgress = require(script.Parent.PartProgress)
@@ -60,6 +61,9 @@ local function handle(player: Player, command: any, value: any)
 	elseif command == "Fever" and typeof(value) == "string" then
 		Round.setFever(value)
 		reply(player, "부품 피버: " .. Fever.modeName(value) .. " (다음 미션부터)")
+	elseif command == "TapMode" and typeof(value) == "string" then
+		Round.setTapMode(value)
+		reply(player, "연타 미션: " .. TapMission.modeName(value) .. " (다음 미션부터)")
 	elseif command == "BotRescue" then
 		if Round.botUseRescue() then
 			reply(player, "봇이 구원 연료를 썼습니다")
