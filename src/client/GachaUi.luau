@@ -3,9 +3,10 @@
 -- 화면: 부품 종류 탭 6개 → 지금 그 종류 부품(아이콘·이름·레어도·★·레벨) → 뽑기 하나(확률, 1회·10회 버튼).
 -- 값은 내 최고 기록 km × Config.Gacha.PricePerKm (Nick 11-28 "일반 고급 최고급 넣지 말고 뽑기 일괄").
 -- 뽑으면 캡슐이 흔들린 뒤 결과 카드가 하나씩 열림 (10회는 11장). 결과마다 '새 부품!' / '★ 돌파' / '경험치 +N'.
--- '도감' 은 그 종류 50개(일반 15·희귀 15·영웅 12·전설 8, 모두 300개)를 레어도 버튼으로 나눠 한 번에 15칸까지 보여 줌
+-- '도감' 은 그 종류 30개(일반 12·희귀 9·영웅 7·전설 2, 모두 180개)를 레어도 버튼으로 나눠 한 번에 12장까지 보여 줌
 -- (휴대폰 사양: 아이콘을 한꺼번에 많이 만들지 않음). 모은 것은 그림과 이름, 못 모은 것은 그림자와 '?'.
--- 지금 부품과 레어도가 같은 모은 부품을 누르면 그 모양으로 바꿔 낌 (능력치는 같음).
+-- 카드를 누르면 오른쪽에 큰 그림·도감 번호·설명·나올 확률. 지금 부품과 레어도가 같은 모은 부품은
+-- '이 모양으로 바꾸기' 로 바꿔 낌 (능력치는 같음).
 -- 누가 전설을 뽑으면 모두의 화면 위쪽에 알림이 뜨고, 다른 사람은 '축하' 를 누를 수 있음 (누른 사람 코인 +50).
 -- 뽑은 사람은 결과 화면에 '모두에게 알렸어요 · 축하 N' 이 뜸 (위쪽 알림이 결과 제목을 가리지 않게).
 
@@ -71,7 +72,6 @@ local pullOne: TextButton
 local pullTen: TextButton
 local priceNote: TextLabel
 local dexArea: Frame
-local dexDesc: TextLabel
 local resultLayer: Frame
 local newsFrame: Frame
 local newsText: TextLabel
@@ -244,29 +244,143 @@ end
 
 local refresh: () -> () -- 아래에서 정의 (도감 버튼이 씀)
 
--- 도감 한 쪽: 위에 레어도 버튼 4개와 모은 수, 아래에 그 레어도 부품 칸 (한 줄 8칸, 15칸이면 두 줄)
-local DEX_FILTER_HEIGHT = 34
-local DEX_CELL_WIDTH = 100
-local DEX_CELL_HEIGHT = 116
-local DEX_GAP = 9
-local DEX_PER_ROW = 8
+-- 도감 한 쪽 (Nick 11-28 "도감 목록도 너무 성의없어보임"): 위에 레어도 버튼 4개(모은 수와 막대)와 모은 부품 수,
+-- 왼쪽에 그 레어도 부품 카드(한 줄 6장, 많아야 12장 = 두 줄, 카드마다 도감 번호·그림·이름. 전설처럼 2장 이하면 큰 카드),
+-- 오른쪽에 고른 부품의 큰 그림·번호·이름·설명·뽑기 1회에 나올 확률과 '이 모양으로 바꾸기' 버튼
+-- (지금 부품과 레어도가 같고 모은 것만)
+local DEX_FILTER_WIDTH = 124
+local DEX_FILTER_HEIGHT = 38
+local DEX_CELL_WIDTH = 84
+local DEX_CELL_HEIGHT = 112
+local DEX_BIG_WIDTH = 168 -- 2장 이하인 쪽(전설)의 큰 카드
+local DEX_BIG_HEIGHT = 2 * DEX_CELL_HEIGHT + 8
+local DEX_GAP = 8
+local DEX_PER_ROW = 6
+local DEX_GRID_TOP = DEX_FILTER_HEIGHT + 10
+local DEX_GRID_WIDTH = DEX_PER_ROW * DEX_CELL_WIDTH + (DEX_PER_ROW - 1) * DEX_GAP
+local DEX_DETAIL_LEFT = PAD + DEX_GRID_WIDTH + 14
+local DEX_DETAIL_WIDTH = PANEL_WIDTH - PAD - DEX_DETAIL_LEFT
+local DEX_DETAIL_ICON = 112
+
+-- 그 부품 하나가 뽑기 1회에 나올 확률 (레어도 확률 ÷ 그 레어도 부품 수), 세 자리까지
+local function itemChance(rarity: number, pool: number): string
+	local value = (G.Odds[rarity] or 0) / math.max(pool, 1) * 100
+	local text = string.format(if value >= 1 then "%.1f" elseif value >= 0.1 then "%.2f" else "%.3f", value)
+	while string.sub(text, -1) == "0" and string.find(text, ".", 1, true) ~= nil do
+		text = string.sub(text, 1, -2)
+	end
+	if string.sub(text, -1) == "." then
+		text = string.sub(text, 1, -2)
+	end
+	return text .. "%"
+end
+
+local function dexNumber(item: Catalog.Variant): string
+	return string.format("No.%02d", item.No)
+end
+
+-- 오른쪽 설명 칸: 고른 부품 (모은 것은 그림·이름·설명, 못 모은 것은 그림자와 확률만)
+local function dexDetail(item: Catalog.Variant, have: boolean, wearing: boolean, rarity: number)
+	local pool = #Catalog.ofRarity(item.Type, item.Rarity)
+	local color = Catalog.RarityColors[item.Rarity]
+	local detail = Ui.frame(dexArea, "DexDetail", {
+		Position = UDim2.fromOffset(DEX_DETAIL_LEFT, DEX_GRID_TOP),
+		Size = UDim2.fromOffset(DEX_DETAIL_WIDTH, BODY_HEIGHT - DEX_GRID_TOP - 6),
+		BackgroundColor3 = color:Lerp(DARK, 0.86),
+		BackgroundTransparency = 0,
+	})
+	detail:SetAttribute("Variant", item.Id)
+	Ui.corner(detail, 12)
+	Ui.stroke(detail, color, 2, 0.35)
+	local slot = Ui.frame(detail, "DetailIcon", {
+		Position = UDim2.fromOffset(12, 12),
+		Size = UDim2.fromOffset(DEX_DETAIL_ICON, DEX_DETAIL_ICON),
+	})
+	PartIcon.make(slot, item, DEX_DETAIL_ICON, not have)
+	local textLeft = 12 + DEX_DETAIL_ICON + 12
+	local textWidth = DEX_DETAIL_WIDTH - textLeft - 10
+	Ui.label(detail, "DetailNo", dexNumber(item) .. " · " .. RARITY_NAMES[item.Rarity], 15, {
+		Position = UDim2.fromOffset(textLeft, 14),
+		Size = UDim2.fromOffset(textWidth, 20),
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextColor3 = rarityText(item.Rarity),
+		Font = Ui.FontLight,
+	})
+	Ui.label(detail, "DetailName", if have then item.Name else "???", 22, {
+		Position = UDim2.fromOffset(textLeft, 36),
+		Size = UDim2.fromOffset(textWidth, 56),
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextYAlignment = Enum.TextYAlignment.Top,
+		TextWrapped = true,
+		TextColor3 = if have then C.Text else C.Dim,
+	})
+	Ui.label(detail, "DetailChance", "1회에 " .. itemChance(item.Rarity, pool), 14, {
+		Position = UDim2.fromOffset(textLeft, 96),
+		Size = UDim2.fromOffset(textWidth, 20),
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextColor3 = C.Dim,
+		Font = Ui.FontLight,
+	})
+	Ui.label(detail, "DetailDesc", if have then item.Desc else "아직 못 모은 부품이에요. 뽑기에서 나와요.", 16, {
+		Position = UDim2.fromOffset(14, 12 + DEX_DETAIL_ICON + 10),
+		Size = UDim2.fromOffset(DEX_DETAIL_WIDTH - 28, 62),
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextYAlignment = Enum.TextYAlignment.Top,
+		TextWrapped = true,
+		TextColor3 = if have then C.Text else C.Dim,
+		Font = Ui.FontLight,
+	})
+	local bottom = BODY_HEIGHT - DEX_GRID_TOP - 6 - 50
+	if have and wearing then
+		Ui.label(detail, "DetailState", "장착 중", 18, {
+			Position = UDim2.fromOffset(14, bottom),
+			Size = UDim2.fromOffset(DEX_DETAIL_WIDTH - 28, 40),
+			TextColor3 = BuildUi.MineColor,
+		})
+	elseif have and item.Rarity == rarity then
+		local wear = Ui.button(detail, "DexWear", "이 모양으로 바꾸기", 18, C.Purple, {
+			Position = UDim2.fromOffset(14, bottom),
+			Size = UDim2.fromOffset(DEX_DETAIL_WIDTH - 28, 40),
+		})
+		wear.Activated:Connect(function()
+			State.emit("Sound", "Press")
+			Net.event("GachaLook"):FireServer(selected, item.Id)
+		end)
+	else
+		Ui.label(detail, "DetailState", if have
+			then "지금 부품이 " .. RARITY_NAMES[rarity] .. "이라 바꿔 낄 수 없어요"
+			else "같은 레어도를 모으면 모양을 골라 낄 수 있어요", 14, {
+			Position = UDim2.fromOffset(14, bottom),
+			Size = UDim2.fromOffset(DEX_DETAIL_WIDTH - 28, 40),
+			TextWrapped = true,
+			TextColor3 = C.Dim,
+			Font = Ui.FontLight,
+		})
+	end
+end
 
 local function refreshDex()
 	clear(dexArea)
 	local rarity, _, _, _, current = partOf(selected)
 	local mine = owned[selected] or {}
-	local filterWidth = 140
 	for r = 1, #RARITY_NAMES do
 		local on = r == dexRarity
 		local total = #Catalog.ofRarity(selected, r)
-		local filter = Ui.button(dexArea, "DexRarity_" .. r, string.format("%s %d/%d", RARITY_NAMES[r], ownedCount(selected, r), total), 16,
+		local have = ownedCount(selected, r)
+		local filter = Ui.button(dexArea, "DexRarity_" .. r, string.format("%s %d/%d", RARITY_NAMES[r], have, total), 16,
 			if on then C.PanelLight else C.Panel, {
-				Position = UDim2.fromOffset(PAD + (r - 1) * (filterWidth + 8), 0),
-				Size = UDim2.fromOffset(filterWidth, DEX_FILTER_HEIGHT),
+				Position = UDim2.fromOffset(PAD + (r - 1) * (DEX_FILTER_WIDTH + 8), 0),
+				Size = UDim2.fromOffset(DEX_FILTER_WIDTH, DEX_FILTER_HEIGHT),
 				BackgroundTransparency = if on then 0 else 0.3,
 				TextColor3 = rarityText(r),
 			})
 		Ui.stroke(filter, Catalog.RarityColors[r], if on then 3 else 1, if on then 0 else 0.5)
+		local _, fill = Ui.bar(filter, "Got", Catalog.RarityColors[r], {
+			AnchorPoint = Vector2.new(0.5, 1),
+			Position = UDim2.new(0.5, 0, 1, -4),
+			Size = UDim2.new(1, -20, 0, 4),
+		})
+		fill.Size = UDim2.fromScale(if total > 0 then have / total else 0, 1)
 		filter.Activated:Connect(function()
 			if dexRarity ~= r then
 				dexRarity = r
@@ -279,70 +393,87 @@ local function refreshDex()
 	Ui.label(dexArea, "DexTotal", string.format("모은 부품 %d / %d", ownedCount(nil, nil), Catalog.count()), 16, {
 		AnchorPoint = Vector2.new(1, 0),
 		Position = UDim2.new(1, -PAD, 0, 0),
-		Size = UDim2.fromOffset(230, DEX_FILTER_HEIGHT),
+		Size = UDim2.fromOffset(200, DEX_FILTER_HEIGHT),
 		TextXAlignment = Enum.TextXAlignment.Right,
 		TextColor3 = C.Dim,
 		Font = Ui.FontLight,
 	})
 	local list = Catalog.ofRarity(selected, dexRarity)
-	local rowWidth = DEX_PER_ROW * DEX_CELL_WIDTH + (DEX_PER_ROW - 1) * DEX_GAP
-	local left = (PANEL_WIDTH - rowWidth) / 2
-	local top = DEX_FILTER_HEIGHT + 8
+	-- 고른 부품: 누른 것 → 이 쪽의 지금 부품 → 이 쪽에서 처음 모은 것 → 첫 칸
+	local pick: Catalog.Variant? = nil
+	local picked = if dexPick then Catalog.get(dexPick) else nil
+	if picked and picked.Type == selected and picked.Rarity == dexRarity then
+		pick = picked
+	elseif current.Rarity == dexRarity then
+		pick = current
+	else
+		for _, item in ipairs(list) do
+			if mine[item.Id] then
+				pick = item
+				break
+			end
+		end
+		pick = pick or list[1]
+	end
+	local big = #list <= 2
+	local cellWidth = if big then DEX_BIG_WIDTH else DEX_CELL_WIDTH
+	local cellHeight = if big then DEX_BIG_HEIGHT else DEX_CELL_HEIGHT
+	local iconSize = if big then 128 else 60
+	local iconTop = if big then 26 else 17
 	for index, item in ipairs(list) do
 		local row = math.floor((index - 1) / DEX_PER_ROW)
 		local col = (index - 1) % DEX_PER_ROW
 		local have = mine[item.Id] == true
 		local wearing = item.Id == current.Id
-		local cell = Ui.button(dexArea, "Dex_" .. item.Id, "", 14, C.Panel, {
-			Position = UDim2.fromOffset(left + col * (DEX_CELL_WIDTH + DEX_GAP), top + row * (DEX_CELL_HEIGHT + 8)),
-			Size = UDim2.fromOffset(DEX_CELL_WIDTH, DEX_CELL_HEIGHT),
-			BackgroundTransparency = 0.2,
-			AutoButtonColor = have,
+		local chosen = pick ~= nil and item.Id == pick.Id
+		local cell = Ui.button(dexArea, "Dex_" .. item.Id, "", 14, if chosen then C.PanelLight else C.Panel, {
+			Position = UDim2.fromOffset(PAD + col * (cellWidth + DEX_GAP), DEX_GRID_TOP + row * (cellHeight + 8)),
+			Size = UDim2.fromOffset(cellWidth, cellHeight),
+			BackgroundTransparency = if chosen then 0 else 0.25,
 		})
-		local stroke = Ui.stroke(cell, if wearing then BuildUi.MineColor else C.Line, if wearing then 3 else 1, 0)
+		local edge = if wearing then BuildUi.MineColor elseif chosen then C.Text else C.Line
+		local stroke = Ui.stroke(cell, edge, if wearing or chosen then 3 else 1, if wearing or chosen then 0 else 0.4)
 		stroke.Name = "Edge"
-		local icon = PartIcon.make(cell, item, 60, not have)
+		local icon = PartIcon.make(cell, item, iconSize, not have)
 		icon.AnchorPoint = Vector2.new(0.5, 0)
-		icon.Position = UDim2.new(0.5, 0, 0, 6)
-		Ui.label(cell, "Name", if have then item.Name else "???", 13, {
-			Position = UDim2.new(0, 3, 0, 68),
-			Size = UDim2.new(1, -6, 0, 30),
+		icon.Position = UDim2.new(0.5, 0, 0, iconTop)
+		Ui.label(cell, "No", string.format("%02d", item.No), if big then 14 else 11, {
+			Position = UDim2.fromOffset(6, 2),
+			Size = UDim2.fromOffset(28, if big then 20 else 14),
+			TextXAlignment = Enum.TextXAlignment.Left,
+			TextColor3 = C.Dim,
+			Font = Ui.FontLight,
+			ZIndex = 3,
+		})
+		Ui.label(cell, "Name", if have then item.Name else "???", if big then 18 else 13, {
+			Position = UDim2.new(0, 3, 0, iconTop + iconSize + 2),
+			Size = UDim2.new(1, -6, 0, if big then 50 else 30),
 			TextColor3 = if have then rarityText(item.Rarity) else C.Dim,
 			TextWrapped = true,
 			TextTruncate = Enum.TextTruncate.AtEnd,
 		})
-		local tag = if wearing then "장착 중" elseif have and item.Rarity == rarity then "눌러서 바꾸기" else ""
-		Ui.label(cell, "Tag", tag, 12, {
-			Position = UDim2.new(0, 3, 0, 98),
-			Size = UDim2.new(1, -6, 0, 14),
-			TextColor3 = if wearing then BuildUi.MineColor else C.Dim,
-			Font = Ui.FontLight,
+		local tag = Ui.label(cell, "Tag", if wearing then "장착 중" else "", if big then 13 else 10, {
+			AnchorPoint = Vector2.new(1, 0),
+			Position = UDim2.new(1, -4, 0, 2),
+			Size = UDim2.fromOffset(if big then 56 else 42, if big then 20 else 14),
+			BackgroundColor3 = BuildUi.MineColor,
+			BackgroundTransparency = if wearing then 0 else 1,
+			TextColor3 = DARK,
+			TextStrokeTransparency = 1,
+			Visible = wearing,
+			ZIndex = 3,
 		})
+		Ui.corner(tag, 8)
 		cell.Activated:Connect(function()
-			dexPick = item.Id
-			if not have then
-				dexDesc.Text = RARITY_NAMES[item.Rarity] .. " · 아직 못 모은 부품"
-				return
-			end
-			dexDesc.Text = item.Name .. " · " .. item.Desc
-			if item.Rarity == rarity and not wearing then
+			if dexPick ~= item.Id then
+				dexPick = item.Id
 				State.emit("Sound", "Press")
-				Net.event("GachaLook"):FireServer(selected, item.Id)
+				refresh()
 			end
 		end)
 	end
-	dexDesc = Ui.label(dexArea, "DexDesc", "모은 부품을 누르면 설명이 나와요. 지금 부품과 레어도가 같으면 그 모양으로 바꿔 껴요", 16, {
-		Position = UDim2.new(0, PAD, 1, -28),
-		Size = UDim2.new(1, -2 * PAD, 0, 24),
-		TextColor3 = C.Dim,
-		TextXAlignment = Enum.TextXAlignment.Left,
-		TextTruncate = Enum.TextTruncate.AtEnd,
-	})
-	if dexPick then
-		local item = Catalog.get(dexPick)
-		if item and mine[item.Id] then
-			dexDesc.Text = item.Name .. " · " .. item.Desc
-		end
+	if pick then
+		dexDetail(pick, mine[pick.Id] == true, pick.Id == current.Id, rarity)
 	end
 end
 
