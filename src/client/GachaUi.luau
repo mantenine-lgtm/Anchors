@@ -2,8 +2,9 @@
 -- 오른쪽 위 버튼 줄(시점·디버그 아래)의 '부품 뽑기' 버튼으로 엽니다. 탑승 대기·조립·정산 때만 보이고 카운트다운·비행이 되면 닫힘.
 -- 화면: 부품 종류 탭 6개 → 지금 그 종류 부품(아이콘·이름·레어도·★·레벨) → 뽑기 하나(확률, 1회·10회 버튼).
 -- 값은 내 최고 기록 km × Config.Gacha.PricePerKm (Nick 11-28 "일반 고급 최고급 넣지 말고 뽑기 일괄").
--- 뽑으면 캡슐이 흔들린 뒤 결과 카드가 하나씩 열림 (10회는 11장). 결과마다 '새 부품!' / '★ 돌파' / '경험치 +N'.
--- '도감' 은 그 종류 30개(일반 12·희귀 9·영웅 7·전설 2, 모두 180개)를 레어도 버튼으로 나눠 한 번에 12장까지 보여 줌
+-- 뽑기 그림은 캡슐 대신 빛이 새는 우주 보급 상자 (Nick 11-28 "뽑기 아이콘은 캡슐 아이콘 말고 적당한 아이콘", Catalog.GachaIcon).
+-- 뽑으면 보급 상자가 흔들린 뒤 결과 카드가 하나씩 열림 (10회는 11장). 결과마다 '새 부품!' / '★ 돌파' / '경험치 +N'.
+-- '도감' 은 그 종류 30개(일반 14·희귀 9·영웅 5·전설 2, 모두 180개)를 레어도 버튼으로 나눠 한 번에 14장까지 보여 줌
 -- (휴대폰 사양: 아이콘을 한꺼번에 많이 만들지 않음). 모은 것은 그림과 이름, 못 모은 것은 그림자와 '?'.
 -- 카드를 누르면 오른쪽에 큰 그림·도감 번호·설명·나올 확률. 지금 부품과 레어도가 같은 모은 부품은
 -- '이 모양으로 바꾸기' 로 바꿔 낌 (능력치는 같음).
@@ -51,7 +52,7 @@ local FOOT_TOP = BODY_TOP + BODY_HEIGHT + 8
 local NEWS_TOP = 84 -- 위쪽 가운데 안내 두 줄(0~76) 바로 아래
 local PENDING_TIMEOUT = 3 -- 결과가 이만큼(초) 안 오면 버튼을 다시 풂
 local REVEAL_GAP = 0.09 -- 10회 뽑기 카드가 하나씩 열리는 간격(초)
-local SHAKE_SECONDS = 0.45 -- 결과 카드가 열리기 전 캡슐이 흔들리는 시간
+local SHAKE_SECONDS = 0.45 -- 결과 카드가 열리기 전 보급 상자가 흔들리는 시간
 local RETRY = 4 -- 내 부품 값을 못 받았으면 이 간격(초)으로 다시 요청
 
 type Tab = { button: TextButton, sub: TextLabel, stroke: UIStroke }
@@ -244,18 +245,76 @@ end
 
 local refresh: () -> () -- 아래에서 정의 (도감 버튼이 씀)
 
+-- 뽑기 그림: 빛이 새는 우주 보급 상자 (Nick 11-28 "뽑기 아이콘은 캡슐 아이콘 말고 적당한 아이콘 알아서 생각해서 생성").
+-- Catalog.GachaIcon 에 올린 그림 Id 가 있으면 그 그림, 없으면 Frame 몇 개로 뚜껑이 들린 금색 상자와 새는 빛을 그림.
+-- glow 를 주면 상자 뒤에 그 색 빛 (결과 연출: 가장 높은 레어도 색)
+local function crateIcon(parent: Instance, name: string, px: number, glow: Color3?): Frame
+	local holder = Ui.frame(parent, name, { Size = UDim2.fromOffset(px, px) })
+	if glow then
+		local halo = Ui.frame(holder, "Glow", {
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.fromScale(0.5, 0.5),
+			Size = UDim2.fromScale(1.1, 1.1),
+			BackgroundColor3 = glow,
+			BackgroundTransparency = 0.45,
+		})
+		Ui.corner(halo, px)
+	end
+	if Catalog.GachaIcon ~= "" then
+		Ui.make("ImageLabel", {
+			Name = "Art",
+			Size = UDim2.fromScale(1, 1),
+			BackgroundTransparency = 1,
+			Image = Catalog.GachaIcon,
+			Parent = holder,
+		})
+		return holder
+	end
+	local light = Ui.frame(holder, "Light", {
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.34),
+		Size = UDim2.fromScale(0.6, 0.6),
+		BackgroundColor3 = Color3.fromRGB(255, 250, 220),
+		BackgroundTransparency = 0.35,
+	})
+	Ui.corner(light, px)
+	local box = Ui.frame(holder, "Box", {
+		Position = UDim2.fromScale(0.1, 0.44),
+		Size = UDim2.fromScale(0.8, 0.5),
+		BackgroundColor3 = GOLD,
+		BackgroundTransparency = 0,
+	})
+	Ui.corner(box, math.max(2, math.floor(px * 0.08)))
+	Ui.frame(box, "Band", {
+		AnchorPoint = Vector2.new(0, 0.5),
+		Position = UDim2.fromScale(0, 0.42),
+		Size = UDim2.fromScale(1, 0.16),
+		BackgroundColor3 = Color3.fromRGB(205, 110, 30),
+		BackgroundTransparency = 0,
+	})
+	local lid = Ui.frame(holder, "Lid", {
+		Position = UDim2.fromScale(0.05, 0.27),
+		Size = UDim2.fromScale(0.82, 0.15),
+		Rotation = -12,
+		BackgroundColor3 = Color3.fromRGB(255, 226, 120),
+		BackgroundTransparency = 0,
+	})
+	Ui.corner(lid, math.max(2, math.floor(px * 0.06)))
+	return holder
+end
+
 -- 도감 한 쪽 (Nick 11-28 "도감 목록도 너무 성의없어보임"): 위에 레어도 버튼 4개(모은 수와 막대)와 모은 부품 수,
--- 왼쪽에 그 레어도 부품 카드(한 줄 6장, 많아야 12장 = 두 줄, 카드마다 도감 번호·그림·이름. 전설처럼 2장 이하면 큰 카드),
+-- 왼쪽에 그 레어도 부품 카드(한 줄 7장, 많아야 14장 = 두 줄, 카드마다 도감 번호·그림·이름. 전설처럼 2장 이하면 큰 카드),
 -- 오른쪽에 고른 부품의 큰 그림·번호·이름·설명·뽑기 1회에 나올 확률과 '이 모양으로 바꾸기' 버튼
 -- (지금 부품과 레어도가 같고 모은 것만)
 local DEX_FILTER_WIDTH = 124
 local DEX_FILTER_HEIGHT = 38
-local DEX_CELL_WIDTH = 84
+local DEX_CELL_WIDTH = 76
 local DEX_CELL_HEIGHT = 112
 local DEX_BIG_WIDTH = 168 -- 2장 이하인 쪽(전설)의 큰 카드
-local DEX_BIG_HEIGHT = 2 * DEX_CELL_HEIGHT + 8
-local DEX_GAP = 8
-local DEX_PER_ROW = 6
+local DEX_GAP = 6
+local DEX_BIG_HEIGHT = 2 * DEX_CELL_HEIGHT + DEX_GAP
+local DEX_PER_ROW = 7
 local DEX_GRID_TOP = DEX_FILTER_HEIGHT + 10
 local DEX_GRID_WIDTH = DEX_PER_ROW * DEX_CELL_WIDTH + (DEX_PER_ROW - 1) * DEX_GAP
 local DEX_DETAIL_LEFT = PAD + DEX_GRID_WIDTH + 14
@@ -427,7 +486,7 @@ local function refreshDex()
 		local wearing = item.Id == current.Id
 		local chosen = pick ~= nil and item.Id == pick.Id
 		local cell = Ui.button(dexArea, "Dex_" .. item.Id, "", 14, if chosen then C.PanelLight else C.Panel, {
-			Position = UDim2.fromOffset(PAD + col * (cellWidth + DEX_GAP), DEX_GRID_TOP + row * (cellHeight + 8)),
+			Position = UDim2.fromOffset(PAD + col * (cellWidth + DEX_GAP), DEX_GRID_TOP + row * (cellHeight + DEX_GAP)),
 			Size = UDim2.fromOffset(cellWidth, cellHeight),
 			BackgroundTransparency = if chosen then 0 else 0.25,
 		})
@@ -439,7 +498,7 @@ local function refreshDex()
 		icon.Position = UDim2.new(0.5, 0, 0, iconTop)
 		Ui.label(cell, "No", string.format("%02d", item.No), if big then 14 else 11, {
 			Position = UDim2.fromOffset(6, 2),
-			Size = UDim2.fromOffset(28, if big then 20 else 14),
+			Size = UDim2.fromOffset(24, if big then 20 else 14),
 			TextXAlignment = Enum.TextXAlignment.Left,
 			TextColor3 = C.Dim,
 			Font = Ui.FontLight,
@@ -679,22 +738,11 @@ local function showResults(data: any)
 		clear(resultLayer)
 		refresh()
 	end)
-	-- 캡슐이 흔들린 뒤 카드가 열림
-	local shell = Ui.frame(resultLayer, "Capsule", {
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.fromScale(0.5, 0.48),
-		Size = UDim2.fromOffset(120, 120),
-		BackgroundColor3 = Catalog.RarityColors[best],
-		BackgroundTransparency = 0,
-		ZIndex = 4,
-	})
-	Ui.corner(shell, 60)
-	local shellLid = Ui.frame(shell, "Lid", {
-		Size = UDim2.fromScale(1, 0.5),
-		BackgroundColor3 = C.White,
-		BackgroundTransparency = 0.1,
-	})
-	Ui.corner(shellLid, 60)
+	-- 보급 상자가 흔들린 뒤 카드가 열림 (상자 뒤 빛은 이번에 나온 가장 높은 레어도 색)
+	local shell = crateIcon(resultLayer, "Crate", 150, Catalog.RarityColors[best])
+	shell.AnchorPoint = Vector2.new(0.5, 0.5)
+	shell.Position = UDim2.fromScale(0.5, 0.48)
+	shell.ZIndex = 4
 	Ui.tween(shell, SHAKE_SECONDS / 3, { Rotation = 14 }, Enum.EasingStyle.Sine)
 	task.delay(SHAKE_SECONDS / 3, function()
 		if shell.Parent then
@@ -801,17 +849,10 @@ local function buildButton()
 	Ui.stroke(openButton, GOLD, 2, 0.2)
 	openButton.TextXAlignment = Enum.TextXAlignment.Right
 	Ui.make("UIPadding", { PaddingRight = UDim.new(0, 14), Parent = openButton })
-	-- 왼쪽에 작은 캡슐
-	local capsule = Ui.frame(openButton, "CapsuleIcon", {
-		AnchorPoint = Vector2.new(0, 0.5),
-		Position = UDim2.new(0, 12, 0.5, 0),
-		Size = UDim2.fromOffset(26, 26),
-		BackgroundColor3 = GOLD,
-		BackgroundTransparency = 0,
-	})
-	Ui.corner(capsule, 13)
-	local lid = Ui.frame(capsule, "Lid", { Size = UDim2.fromScale(1, 0.5), BackgroundColor3 = C.White, BackgroundTransparency = 0 })
-	Ui.corner(lid, 13)
+	-- 왼쪽에 작은 보급 상자
+	local icon = crateIcon(openButton, "GachaIcon", 34)
+	icon.AnchorPoint = Vector2.new(0, 0.5)
+	icon.Position = UDim2.new(0, 8, 0.5, 0)
 	openButton.Activated:Connect(function()
 		State.emit("Sound", "Press")
 		setOpen(not isOpen)
@@ -927,7 +968,7 @@ local function buildPanel()
 		refresh()
 	end)
 
-	-- 뽑기 (하나): 왼쪽 캡슐과 확률, 오른쪽 1회·10회 버튼과 값 설명
+	-- 뽑기 (하나): 왼쪽 보급 상자와 확률, 오른쪽 1회·10회 버튼과 값 설명
 	pullArea = Ui.frame(panel, "PullArea", {
 		Position = UDim2.fromOffset(0, BODY_TOP),
 		Size = UDim2.new(1, 0, 0, BODY_HEIGHT),
@@ -940,29 +981,15 @@ local function buildPanel()
 	})
 	Ui.corner(oddsBox, 12)
 	Ui.stroke(oddsBox, GOLD, 2, 0.5)
-	local ball = Ui.frame(oddsBox, "Ball", {
-		Position = UDim2.fromOffset(22, 18),
-		Size = UDim2.fromOffset(84, 84),
-		BackgroundColor3 = GOLD,
-		BackgroundTransparency = 0,
-	})
-	Ui.corner(ball, 42)
-	local lid = Ui.frame(ball, "Lid", { Size = UDim2.fromScale(1, 0.5), BackgroundColor3 = C.White, BackgroundTransparency = 0.05 })
-	Ui.corner(lid, 42)
-	Ui.frame(ball, "Band", {
-		AnchorPoint = Vector2.new(0, 0.5),
-		Position = UDim2.fromScale(0, 0.5),
-		Size = UDim2.new(1, 0, 0, 6),
-		BackgroundColor3 = DARK,
-		BackgroundTransparency = 0,
-	})
-	Ui.label(oddsBox, "CapsuleName", "부품 캡슐", 26, {
+	local crate = crateIcon(oddsBox, "Crate", 92)
+	crate.Position = UDim2.fromOffset(18, 12)
+	Ui.label(oddsBox, "CrateName", "부품 보급 상자", 26, {
 		Position = UDim2.fromOffset(124, 24),
 		Size = UDim2.fromOffset(280, 34),
 		TextXAlignment = Enum.TextXAlignment.Left,
 		TextColor3 = GOLD,
 	})
-	Ui.label(oddsBox, "CapsuleSub", "고른 종류의 부품이 나와요", 16, {
+	Ui.label(oddsBox, "CrateSub", "고른 종류의 부품이 나와요", 16, {
 		Position = UDim2.fromOffset(124, 60),
 		Size = UDim2.fromOffset(280, 24),
 		TextXAlignment = Enum.TextXAlignment.Left,
